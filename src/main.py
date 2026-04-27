@@ -50,6 +50,27 @@ def get_available_skills():
                 continue
     return skills
 
+import queue
+import threading
+
+# Global chat queue
+chat_queue = queue.Queue()
+
+def chat_worker(orch):
+    while True:
+        task = chat_queue.get()
+        if task is None: break
+        try:
+            config.MODEL = task.get('model', config.MODEL)
+            reply = orch.chat(task['message'])
+            # Since we moved to queue, we need a way to communicate back to the UI.
+            # For now, we can rely on existing UI polling mechanisms if implemented, 
+            # or simply append to status_logs if the UI displays that.
+        except Exception as e:
+            orch._log(f"\n❌ Error in chat loop: {e}")
+        finally:
+            chat_queue.task_done()
+
 def save_skill(name: str, data: dict):
     skills_dir = pathlib.Path(config.BASE_DIR) / "src" / "skills"
     path = skills_dir / f"{name.lower().replace(' ', '_')}.yaml"
@@ -273,7 +294,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--web",
         action="store_true",
-        help="Run using the browser UI via ui.html.",
+        help="Launch the web interface",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run without opening the browser",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port to run the web interface on",
     )
     parser.add_argument(
         "--model",
