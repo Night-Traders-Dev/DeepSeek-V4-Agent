@@ -705,11 +705,10 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
 from refactor_loop import RefactorLoop
 from orchestrator import Orchestrator
 
-def run_web(orchestrator: Orchestrator, memory_manager: MemoryManager, port: int = 0) -> None:
-    # Start background refactor loop
+def run_web(orchestrator: Orchestrator, memory_manager: MemoryManager, port: int = 0, headless: bool = False) -> None:
     loop = RefactorLoop(orchestrator._token)
     loop.start()
-
+    threading.Thread(target=chat_worker, args=(orchestrator,), daemon=True).start()
     handler = BrowserHandler
     handler.orchestrator = orchestrator
     handler.memory_manager = memory_manager
@@ -717,15 +716,15 @@ def run_web(orchestrator: Orchestrator, memory_manager: MemoryManager, port: int
     orchestrator._conversation = list(handler.history)
     handler.session_usage = BrowserHandler._empty_usage()
     handler.state_lock = threading.Lock()
-
-    with ThreadedHTTPServer(("127.0.0.1", port), handler) as server:
+    server_address = ("0.0.0.0", port)
+    with ThreadedHTTPServer(server_address, handler) as server:
         host, actual_port = server.server_address
-        url = f"http://{host}:{actual_port}/"
+        url = f"http://localhost:{actual_port}/"
         print(BANNER)
-        print(f"🌐  Starting browser UI at {url}")
-        print("🔐  Loading token and hosting local interface...\n")
-
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        print(f"🌐  Starting browser UI at http://0.0.0.0:{actual_port}/")
+        if not headless:
+            webbrowser.open(url)
+        server.serve_forever()
         thread.start()
 
         try:
@@ -759,7 +758,7 @@ def main() -> None:
     orchestrator.set_profile(profile)
 
     if args.web:
-        run_web(orchestrator, memory_manager)
+        run_web(orchestrator, memory_manager, port=args.port, headless=args.headless)
         return
 
     run_cli(orchestrator)
