@@ -345,8 +345,8 @@ class BaseAgent:
             content = msg.get("content") or ""
             thinking = msg.get("thinking")
             if thinking:
-                # Prepend thinking if present, wrapped in a style the UI can handle or just as text
-                content = f"> Thinking: {thinking}\n\n{content}"
+                # Use a specific marker that the UI can easily parse
+                content = f"[[THINKING]]\n{thinking.strip()}\n[[/THINKING]]\n\n{content}"
             tool_calls = msg.get("tool_calls") or []
             return content, tool_calls
 

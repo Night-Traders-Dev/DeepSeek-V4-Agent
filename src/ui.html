@@ -205,6 +205,16 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;}
   padding:2px 5px;border-radius:4px;color:var(--sand);
 }
 .bubble pre code{background:none;padding:0;color:inherit;}
+.thinking-block{
+  background:rgba(233,196,106,.05);border-left:3px solid var(--sand);
+  padding:12px 16px;margin:8px 0 15px 0;border-radius:0 8px 8px 0;
+  font-style:italic;color:var(--muted);font-size:13px;line-height:1.6;
+}
+.thinking-block::before{
+  content:'THOUGHTS';display:block;font-style:normal;font-weight:700;
+  font-size:9px;letter-spacing:1px;color:var(--sand);margin-bottom:6px;
+  opacity:.8;
+}
 .attachment-list{display:flex;flex-wrap:wrap;gap:6px;max-width:100%;}
 .attachment-chip{
   display:flex;align-items:center;gap:6px;max-width:260px;
@@ -468,6 +478,7 @@ textarea{resize:vertical;min-height:84px;}
   </div>
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
 const messagesEl = document.getElementById('messages');
 const inputEl = document.getElementById('user-input');
@@ -530,9 +541,21 @@ const MODEL_PROFILES = [
 
 function profileFor(model) {
   const value = String(model || modelSelect.value || '');
-  return MODEL_PROFILES.find(item => item.test(value)) || {
-    name: value.split(':')[0] || value.split('/')[0] || 'Model',
-    initials: (value.replace(/^[^a-zA-Z0-9]+/, '').slice(0, 2) || 'M').toUpperCase(),
+  const provider = MODEL_PROFILES.find(item => item.test(value));
+  
+  if (provider) return provider;
+
+  // Better fallback name for local models
+  let fallbackName = value.split(':')[0];
+  if (fallbackName.includes('/')) {
+    fallbackName = fallbackName.split('/').pop();
+  }
+  // Remove version/size info if any (e.g. 7b)
+  fallbackName = fallbackName.split('-')[0].charAt(0).toUpperCase() + fallbackName.split('-')[0].slice(1);
+
+  return {
+    name: fallbackName || 'Model',
+    initials: (fallbackName.slice(0, 2) || 'M').toUpperCase(),
     logo: '',
   };
 }
@@ -872,6 +895,20 @@ async function updateCloudUsage() {
 
 cloudUsageWrap.addEventListener('click', updateCloudUsage);
 
+function renderMessageText(text) {
+  if (!text) return '';
+  
+  // Extract thinking block if present
+  let thinkingHtml = '';
+  const thinkingRegex = /\[\[THINKING\]\]([\s\S]*?)\[\[\/THINKING\]\]/g;
+  const cleanText = text.replace(thinkingRegex, (match, content) => {
+    thinkingHtml += `<div class="thinking-block">${marked.parse(content.trim())}</div>`;
+    return '';
+  });
+
+  return thinkingHtml + marked.parse(cleanText.trim());
+}
+
 function appendMessage(role, text, options = {}) {
   if (welcomeEl) welcomeEl.style.display = 'none';
 
@@ -893,7 +930,8 @@ function appendMessage(role, text, options = {}) {
 
   const meta = document.createElement('div');
   meta.className = 'msg-meta';
-  meta.textContent = role === 'user' ? 'You' : `PuterAgent · ${shortModel(model)}`;
+  const profile = profileFor(model);
+  meta.textContent = role === 'user' ? 'You' : `${profile.name} · ${shortModel(model)}`;
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
