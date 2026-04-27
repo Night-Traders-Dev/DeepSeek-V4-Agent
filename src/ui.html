@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PuterAgent</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23e76f51'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-family='Arial,sans-serif' font-size='32' font-weight='700' fill='white'%3EP%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -130,7 +131,7 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;}
 #messages::-webkit-scrollbar-thumb{background:rgba(244,162,97,.2);border-radius:2px;}
 .welcome{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  flex:1;text-align:center;padding:40px 20px;gap:0;
+  flex:1;text-align:center;padding:28px 20px 20px;gap:0;
 }
 .welcome-glyph{font-size:52px;color:var(--coral);opacity:.18;line-height:1;margin-bottom:18px;user-select:none;}
 .welcome h2{font-size:27px;font-weight:700;color:var(--coral);margin-bottom:8px;}
@@ -340,7 +341,6 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;}
         <button class="chip" onclick="fillInput('Review the attached file and summarize the important issues')">Review a file</button>
         <button class="chip" onclick="fillInput('Debug this error: AttributeError: object has no attribute')">Debug an error</button>
         <button class="chip" onclick="fillInput('Explain how the orchestrator routes tasks to experts')">Explain architecture</button>
-        <button class="chip" onclick="fillInput('Add a new expert agent to this system')">Add an agent</button>
       </div>
     </div>
   </div>
@@ -387,14 +387,14 @@ let pendingAttachments = [];
 let messageStore = [];
 
 const MODEL_PROFILES = [
-  {test: m => m.startsWith('deepseek/'), name: 'DeepSeek', initials: 'DS', logo: 'https://www.deepseek.com/favicon.ico'},
-  {test: m => m.startsWith('anthropic/'), name: 'Anthropic', initials: 'A', logo: 'https://www.anthropic.com/favicon.ico'},
-  {test: m => m.startsWith('openai/'), name: 'OpenAI', initials: 'AI', logo: 'https://openai.com/favicon.ico'},
-  {test: m => m.startsWith('moonshotai/'), name: 'Moonshot AI', initials: 'K', logo: 'https://kimi.moonshot.cn/favicon.ico'},
-  {test: m => m.startsWith('x-ai/'), name: 'xAI', initials: 'x', logo: 'https://x.ai/favicon.ico'},
-  {test: m => m.startsWith('minimax/'), name: 'MiniMax', initials: 'MM', logo: 'https://www.minimax.io/favicon.ico'},
-  {test: m => m.startsWith('nvidia/'), name: 'NVIDIA', initials: 'NV', logo: 'https://www.nvidia.com/favicon.ico'},
-  {test: m => m.startsWith('google/'), name: 'Gemini', initials: 'G', logo: 'https://www.gstatic.com/lamda/images/gemini_sparkle_aurora_33f86dc0c0257da337c63.svg'},
+  {test: m => m.startsWith('deepseek/'), name: 'DeepSeek', initials: 'DS', logo: 'https://www.google.com/s2/favicons?domain=deepseek.com&sz=64'},
+  {test: m => m.startsWith('anthropic/'), name: 'Anthropic', initials: 'A', logo: 'https://www.google.com/s2/favicons?domain=anthropic.com&sz=64'},
+  {test: m => m.startsWith('openai/'), name: 'OpenAI', initials: 'AI', logo: 'https://www.google.com/s2/favicons?domain=openai.com&sz=64'},
+  {test: m => m.startsWith('moonshotai/'), name: 'Moonshot AI', initials: 'K', logo: 'https://www.google.com/s2/favicons?domain=kimi.moonshot.cn&sz=64'},
+  {test: m => m.startsWith('x-ai/'), name: 'xAI', initials: 'x', logo: 'https://www.google.com/s2/favicons?domain=x.ai&sz=64'},
+  {test: m => m.startsWith('minimax/'), name: 'MiniMax', initials: 'MM', logo: 'https://www.google.com/s2/favicons?domain=minimax.io&sz=64'},
+  {test: m => m.startsWith('nvidia/'), name: 'NVIDIA', initials: 'NV', logo: 'https://www.google.com/s2/favicons?domain=nvidia.com&sz=64'},
+  {test: m => m.startsWith('google/'), name: 'Gemini', initials: 'G', logo: 'https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64'},
 ];
 
 function profileFor(model) {

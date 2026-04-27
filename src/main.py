@@ -161,11 +161,14 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             return message
 
         sections = [message or "Use the attached files as context for this turn."]
-        sections.append("\nAttached files:")
+        sections.append(
+            "\nUploaded file contents are included inline below. "
+            "They are not workspace paths unless the user explicitly says they are."
+        )
         for item in attachments:
             truncation = " truncated" if item["truncated"] else ""
             sections.append(
-                f"\n--- {item['name']} ({item['type']}, {item['size']} bytes{truncation}) ---\n"
+                f"\n--- Uploaded file: {item['name']} ({item['type']}, {item['size']} bytes{truncation}) ---\n"
                 f"{item['content']}"
             )
         return "\n".join(sections)
