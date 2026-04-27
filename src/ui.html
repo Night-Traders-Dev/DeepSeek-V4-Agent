@@ -524,6 +524,10 @@ textarea{resize:vertical;min-height:84px;}
 
       <div id="tab-advanced" class="tab-pane">
         <div>
+          <div class="field-label">Sandbox Refactor Loop</div>
+          <input id="sandbox-loop-toggle" type="checkbox" onchange="toggleSandbox(this.checked)">
+        </div>
+        <div>
           <div class="field-label">System Prompt Override</div>
           <textarea id="profile-preferences" placeholder="Instructions for the agent..."></textarea>
         </div>
@@ -818,14 +822,12 @@ async function saveSkill() {
   loadSkills();
 }
 
-async function deleteSkill() {
-  const name = document.getElementById('skill-name').value;
-  await fetch('/skills', {
+async function toggleSandbox(enabled) {
+  await fetch('/sandbox-control', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({action: 'delete', name})
+    body: JSON.stringify({enabled})
   });
-  loadSkills();
 }
 
 async function loadProfileSettings() {

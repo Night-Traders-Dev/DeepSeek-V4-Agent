@@ -547,21 +547,19 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
 
         if path == "/sandbox-status":
             from refactor_loop import RefactorLoop
-            sandbox_path = config.BASE_DIR.parent / ".sandbox"
-            exists = sandbox_path.exists()
-            # Try to get loop instance
-            loop_info = {"current_task": "Not running", "completed": []}
-            for t in threading.enumerate():
-                if isinstance(t, RefactorLoop):
-                    loop_info = {"current_task": t.current_task, "completed": t.completed_tasks}
-            
-            self._send_json({
-                "exists": exists,
-                "path": str(sandbox_path),
-                "status": "ready" if exists else "initing",
-                "loop": loop_info
-            })
-            return
+            if path == "/sandbox-control":
+                data = self._parse_json()
+                global active_refactor_loop
+                if data.get("enabled"):
+                    if not active_refactor_loop or not active_refactor_loop.is_alive():
+                        active_refactor_loop = RefactorLoop(self.orchestrator._token)
+                        active_refactor_loop.start()
+                else:
+                    if active_refactor_loop:
+                        active_refactor_loop.running = False
+                        active_refactor_loop = None
+                self._send_json({"status": "ok"})
+                return
 
         if path == "/logs":
             self._send_json({"logs": log_buffer.getvalue()})
@@ -737,9 +735,8 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
 from refactor_loop import RefactorLoop
 from orchestrator import Orchestrator
 
+    global active_refactor_loop
 def run_web(orchestrator: Orchestrator, memory_manager: MemoryManager, port: int = 0, headless: bool = False) -> None:
-    loop = RefactorLoop(orchestrator._token)
-    loop.start()
     threading.Thread(target=chat_worker, args=(orchestrator,), daemon=True).start()
     handler = BrowserHandler
     handler.orchestrator = orchestrator
