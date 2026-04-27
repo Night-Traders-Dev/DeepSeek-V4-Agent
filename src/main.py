@@ -506,16 +506,26 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if path == "/sandbox-status":
+            from refactor_loop import RefactorLoop
             sandbox_path = config.BASE_DIR.parent / ".sandbox"
             exists = sandbox_path.exists()
+            # Try to get loop instance
+            loop_info = {"current_task": "Not running", "completed": []}
+            for t in threading.enumerate():
+                if isinstance(t, RefactorLoop):
+                    loop_info = {"current_task": t.current_task, "completed": t.completed_tasks}
+            
             self._send_json({
                 "exists": exists,
                 "path": str(sandbox_path),
-                "status": "ready" if exists else "initing"
+                "status": "ready" if exists else "initing",
+                "loop": loop_info
             })
             return
 
         if path == "/logs":
+            self._send_json({"logs": log_buffer.getvalue()})
+            return
 
         if path == "/status":
             logs = self.orchestrator.status_logs

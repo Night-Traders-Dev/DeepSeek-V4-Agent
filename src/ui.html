@@ -1303,8 +1303,12 @@ setInterval(async () => {
     const response = await fetch('/sandbox-status');
     const data = await response.json();
     const statusEl = document.getElementById('sandbox-status');
+    const metricsEl = document.getElementById('sandbox-metrics');
     if (statusEl) {
-      statusEl.textContent = `Sandbox Status: ${data.status}`;
+      statusEl.textContent = `Sandbox Status: ${data.status} | Task: ${data.loop.current_task}`;
+      metricsEl.innerHTML = data.loop.completed.length > 0 ? 
+        `<div><b>Completed Tasks:</b></div><ul>${data.loop.completed.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>` : 
+        'No completed tasks yet.';
     }
   } catch (err) {}
 }, 5000);
