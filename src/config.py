@@ -10,8 +10,9 @@ SYSPROMPT_PATH = BASE_DIR.parent / "SysPrompt"
 WORKSPACE   = pathlib.Path.cwd()   # All file tools are scoped to this dir
 
 # ── API ───────────────────────────────────────────────────────────────────────
-LOCAL_API_URL   = "http://localhost:11434/api/chat"
+LOCAL_API_URL   = "http://127.0.0.1:11434/api/chat"
 CLOUD_API_URL   = "https://api.puter.com/v1/ai/chat"
+DASHSCOPE_API_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
 USAGE_API_URL   = "https://api.puter.com/drivers/usage"
 API_URL         = LOCAL_API_URL  # Default to local
 
@@ -27,6 +28,7 @@ LOCAL_MODELS = [
 ]
 
 CLOUD_MODELS = [
+    "qwen3-coder-plus",
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-chat-v3.1",
     "deepseek/deepseek-chat",
@@ -70,14 +72,24 @@ API_HEADERS = {
 
 # ── Loaders ───────────────────────────────────────────────────────────────────
 def load_token() -> str:
-    if SECRET_PATH.exists():
-        try:
-            token = SECRET_PATH.read_text("utf-8").strip()
-            if token:
-                return token
-        except Exception:
-            pass
+    # Check current dir then parent dir
+    for p in [BASE_DIR.parent / "secret", WORKSPACE / "secret"]:
+        if p.exists():
+            try:
+                token = p.read_text("utf-8").strip()
+                if token: return token
+            except Exception: pass
     return "ollama-local"
+
+def load_dashscope_token() -> str | None:
+    # Check current dir then parent dir
+    for p in [BASE_DIR.parent / "secret_dash", WORKSPACE / "secret_dash"]:
+        if p.exists():
+            try:
+                token = p.read_text("utf-8").strip()
+                if token: return token
+            except Exception: pass
+    return None
 
 
 def load_orchestrator_prompt() -> str:

@@ -40,10 +40,20 @@ class BaseAgent:
         """Returns (url, headers) for the given model."""
         # Use cloud if model is explicitly in CLOUD_MODELS
         if model in config.CLOUD_MODELS:
+            # Special case: Route Qwen3 models to DashScope if key exists
+            if model.startswith("qwen3"):
+                dash_key = config.load_dashscope_token()
+                if dash_key:
+                    return config.DASHSCOPE_API_URL, {
+                        **config.API_HEADERS,
+                        "Authorization": f"Bearer {dash_key}"
+                    }
+            
+            # Default cloud route (Puter)
             url = config.CLOUD_API_URL
             headers = {**config.API_HEADERS, "Authorization": f"Bearer {self._token}"}
         else:
-            # Default to local for anything else (including HF local models with slashes)
+            # Default to local for anything else
             url = config.LOCAL_API_URL
             headers = dict(config.API_HEADERS)
         return url, headers

@@ -29,7 +29,7 @@ def get_local_model_details(model_name: str) -> dict:
         return LOCAL_MODEL_DETAILS_CACHE[model_name]
     
     try:
-        resp = requests.post("http://localhost:11434/api/show", json={"name": model_name}, timeout=2)
+        resp = requests.post("http://127.0.0.1:11434/api/show", json={"name": model_name}, timeout=2)
         if resp.status_code == 200:
             data = resp.json()
             details = {
@@ -46,7 +46,7 @@ def get_local_model_details(model_name: str) -> dict:
 def get_local_ollama_models() -> list[dict]:
     """Fetch the list of pulled models and their details from local Ollama instance."""
     try:
-        resp = requests.get("http://localhost:11434/api/tags", timeout=3)
+        resp = requests.get("http://127.0.0.1:11434/api/tags", timeout=3)
         if resp.status_code == 200:
             data = resp.json()
             models = []
