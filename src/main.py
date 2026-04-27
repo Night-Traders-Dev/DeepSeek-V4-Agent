@@ -21,16 +21,47 @@ import webbrowser
 import requests
 from http import HTTPStatus
 
-def get_local_ollama_models() -> list[str]:
-    """Fetch the list of pulled models from local Ollama instance."""
+LOCAL_MODEL_DETAILS_CACHE: dict[str, dict] = {}
+
+def get_local_model_details(model_name: str) -> dict:
+    """Fetch specific details (like capabilities) for an Ollama model."""
+    if model_name in LOCAL_MODEL_DETAILS_CACHE:
+        return LOCAL_MODEL_DETAILS_CACHE[model_name]
+    
+    try:
+        resp = requests.post("http://localhost:11434/api/show", json={"name": model_name}, timeout=2)
+        if resp.status_code == 200:
+            data = resp.json()
+            details = {
+                "name": model_name,
+                "capabilities": data.get("capabilities", []),
+                "supports_tools": "tools" in data.get("capabilities", []),
+            }
+            LOCAL_MODEL_DETAILS_CACHE[model_name] = details
+            return details
+    except Exception:
+        pass
+    return {"name": model_name, "capabilities": [], "supports_tools": False}
+
+def get_local_ollama_models() -> list[dict]:
+    """Fetch the list of pulled models and their details from local Ollama instance."""
     try:
         resp = requests.get("http://localhost:11434/api/tags", timeout=3)
         if resp.status_code == 200:
             data = resp.json()
-            return [m["name"] for m in data.get("models", [])]
+            models = []
+            for m in data.get("models", []):
+                name = m["name"]
+                details = get_local_model_details(name)
+                models.append({
+                    "name": name,
+                    "supports_tools": details["supports_tools"]
+                })
+            return models
     except Exception:
         pass
-    return config.LOCAL_MODELS
+    # Fallback to config but with tool support guess
+    return [{"name": m, "supports_tools": "coder" in m or "llama3.1" in m} for m in config.LOCAL_MODELS]
 
 def get_puter_usage(token: str) -> dict:
     """Fetch Puter account usage/balance."""
@@ -139,6 +170,9 @@ class MemoryManager:
         return sorted([f.stem for f in themes_path.glob("*.css") if f.is_file()]) or [config.DEFAULT_USER_PROFILE["theme"]]
 
     def theme_path(self, theme_name: str) -> pathlib.Path:
+        # Handle cases where theme_name already includes .css
+        if theme_name.endswith(".css"):
+            return config.BASE_DIR.parent / "themes" / theme_name
         return config.BASE_DIR.parent / "themes" / f"{theme_name}.css"
 
     def list_directory(self, path: str, recursive: bool = False) -> dict:
@@ -321,14 +355,16 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
 
     def _state_payload(self) -> dict:
         local_models = get_local_ollama_models()
+        # Cloud models from our list all support tools via Puter's adapter
+        cloud_models = [{"name": m, "supports_tools": True} for m in config.CLOUD_MODELS]
         return {
             "messages": type(self).history,
             "model": config.MODEL,
             "session_metrics": dict(type(self).session_usage),
             "profile": self.memory_manager.load_profile(),
             "local_models": local_models,
-            "cloud_models": config.CLOUD_MODELS,
-            "available_models": local_models + config.CLOUD_MODELS,
+            "cloud_models": cloud_models,
+            "available_models": [m["name"] for m in local_models + cloud_models],
             "themes": self.memory_manager.available_themes(),
         }
 
@@ -403,7 +439,8 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             query = urllib.parse.urlparse(self.path).query
             params = urllib.parse.parse_qs(query)
             model = params.get("model", [config.MODEL])[0]
-            available = get_local_ollama_models() + config.CLOUD_MODELS
+            local_names = [m["name"] for m in get_local_ollama_models()]
+            available = local_names + config.CLOUD_MODELS
             if model not in available:
                 self.send_error(HTTPStatus.BAD_REQUEST, f"Invalid model selection: {model}")
                 return
@@ -418,7 +455,9 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             params = urllib.parse.parse_qs(query)
             mode = params.get("mode", ["local"])[0].lower()
             if mode == "cloud":
-                self._send_json({"models": config.CLOUD_MODELS})
+                # Cloud models always support tools via Puter's adapter
+                models = [{"name": m, "supports_tools": True} for m in config.CLOUD_MODELS]
+                self._send_json({"models": models})
             else:
                 self._send_json({"models": get_local_ollama_models()})
             return
@@ -453,7 +492,8 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             model = payload.get("model")
             if model:
                 model_str = str(model).strip()
-                available = get_local_ollama_models() + config.CLOUD_MODELS
+                local_names = [m["name"] for m in get_local_ollama_models()]
+                available = local_names + config.CLOUD_MODELS
                 if model_str not in available:
                     self.send_error(HTTPStatus.BAD_REQUEST, f"Invalid model selection: {model_str}")
                     return

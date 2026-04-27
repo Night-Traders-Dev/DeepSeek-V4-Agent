@@ -38,12 +38,12 @@ class BaseAgent:
 
     def _get_api_config(self, model: str) -> tuple[str, dict]:
         """Returns (url, headers) for the given model."""
-        if model in config.CLOUD_MODELS or "/" in str(model):
-            # Cloud models use Puter API and the real token
+        # Use cloud if model is explicitly in CLOUD_MODELS
+        if model in config.CLOUD_MODELS:
             url = config.CLOUD_API_URL
             headers = {**config.API_HEADERS, "Authorization": f"Bearer {self._token}"}
         else:
-            # Local models use Ollama and usually no auth
+            # Default to local for anything else (including HF local models with slashes)
             url = config.LOCAL_API_URL
             headers = dict(config.API_HEADERS)
         return url, headers
@@ -224,6 +224,13 @@ class BaseAgent:
                     timeout=config.REQUEST_TIMEOUT,
                     stream=False,
                 )
+                
+                # If model doesn't support tools, try once without tools before moving to fallback
+                if resp.status_code == 400 and schemas and "does not support tools" in resp.text:
+                    print(f"\n[{self.name}] {model} does not support tool-calling. Retrying without tools.")
+                    no_tools_payload = {k: v for k, v in payload.items() if k not in ("tools", "tool_choice")}
+                    resp = requests.post(url, headers=headers, json=no_tools_payload, timeout=config.REQUEST_TIMEOUT)
+
                 data = self._decode_json_response(resp)
             except Exception as exc:
                 self._record_error(f"Request error: {exc}")

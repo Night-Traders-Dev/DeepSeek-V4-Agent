@@ -88,6 +88,20 @@ aside .spacer{flex:1;}
   cursor:pointer;border-radius:6px;transition:all .15s;
 }
 .mode-btn.active{background:var(--orange);color:#fff;}
+.tools-filter{
+  display:flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer;
+  font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.5px;user-select:none;
+}
+.tools-filter input{display:none;}
+.tools-filter .dot{
+  width:14px;height:14px;border:1px solid var(--border2);border-radius:3px;
+  position:relative;transition:all .15s;
+}
+.tools-filter input:checked + .dot{background:var(--orange);border-color:var(--orange);}
+.tools-filter input:checked + .dot::after{
+  content:'✓';position:absolute;top:-1px;left:2px;color:#fff;font-size:10px;
+}
 .model-label{
   font-family:var(--mono);font-size:10px;color:var(--muted);
   text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;
@@ -328,6 +342,11 @@ textarea{resize:vertical;min-height:84px;}
       <button class="mode-btn active" data-mode="local">Local</button>
       <button class="mode-btn" data-mode="cloud">Cloud</button>
     </div>
+    <label class="tools-filter">
+      <input type="checkbox" id="tools-only-check">
+      <span class="dot"></span>
+      Tools Only
+    </label>
     <div>
       <div class="model-label">Model</div>
       <select id="model-select" class="model-select">
@@ -493,16 +512,20 @@ let pendingAttachments = [];
 let messageStore = [];
 
 const MODEL_PROFILES = [
-  {test: m => m.startsWith('qwen'), name: 'Qwen', initials: 'QW', logo: 'https://www.google.com/s2/favicons?domain=alibabacloud.com&sz=64'},
-  {test: m => m.startsWith('deepseek'), name: 'DeepSeek', initials: 'DS', logo: 'https://www.google.com/s2/favicons?domain=deepseek.com&sz=64'},
-  {test: m => m.startsWith('neural-chat'), name: 'Neural Chat', initials: 'NC', logo: 'https://www.google.com/s2/favicons?domain=intel.com&sz=64'},
-  {test: m => m.startsWith('mistral'), name: 'Mistral', initials: 'M', logo: 'https://www.google.com/s2/favicons?domain=mistral.ai&sz=64'},
-  {test: m => m.startsWith('llama'), name: 'Llama', initials: 'LL', logo: 'https://www.google.com/s2/favicons?domain=meta.com&sz=64'},
-  {test: m => m.startsWith('anthropic') || m.includes('claude'), name: 'Anthropic', initials: 'A', logo: 'https://www.google.com/s2/favicons?domain=anthropic.com&sz=64'},
-  {test: m => m.startsWith('openai') || m.startsWith('gpt'), name: 'OpenAI', initials: 'O', logo: 'https://www.google.com/s2/favicons?domain=openai.com&sz=64'},
-  {test: m => m.startsWith('google') || m.startsWith('gemini'), name: 'Google', initials: 'G', logo: 'https://www.google.com/s2/favicons?domain=google.com&sz=64'},
-  {test: m => m.startsWith('moonshot') || m.includes('kimi'), name: 'Moonshot', initials: 'K', logo: 'https://www.google.com/s2/favicons?domain=moonshot.cn&sz=64'},
-  {test: m => m.startsWith('x-ai') || m.includes('grok'), name: 'xAI', initials: 'X', logo: 'https://www.google.com/s2/favicons?domain=x.ai&sz=64'},
+  {test: m => /qwen/i.test(m), name: 'Qwen', initials: 'QW', logo: 'https://www.google.com/s2/favicons?domain=alibabacloud.com&sz=64'},
+  {test: m => /deepseek/i.test(m), name: 'DeepSeek', initials: 'DS', logo: 'https://www.google.com/s2/favicons?domain=deepseek.com&sz=64'},
+  {test: m => /neural-chat/i.test(m), name: 'Neural Chat', initials: 'NC', logo: 'https://www.google.com/s2/favicons?domain=intel.com&sz=64'},
+  {test: m => /mistral|mixtral/i.test(m), name: 'Mistral', initials: 'M', logo: 'https://www.google.com/s2/favicons?domain=mistral.ai&sz=64'},
+  {test: m => /llama|dolphin/i.test(m), name: 'Llama', initials: 'LL', logo: 'https://www.google.com/s2/favicons?domain=meta.com&sz=64'},
+  {test: m => /anthropic|claude/i.test(m), name: 'Anthropic', initials: 'A', logo: 'https://www.google.com/s2/favicons?domain=anthropic.com&sz=64'},
+  {test: m => /openai|gpt/i.test(m), name: 'OpenAI', initials: 'O', logo: 'https://www.google.com/s2/favicons?domain=openai.com&sz=64'},
+  {test: m => /google|gemini|gemma/i.test(m), name: 'Google', initials: 'G', logo: 'https://www.google.com/s2/favicons?domain=google.com&sz=64'},
+  {test: m => /moonshot|kimi/i.test(m), name: 'Moonshot', initials: 'K', logo: 'https://www.google.com/s2/favicons?domain=moonshot.cn&sz=64'},
+  {test: m => /x-ai|grok/i.test(m), name: 'xAI', initials: 'X', logo: 'https://www.google.com/s2/favicons?domain=x.ai&sz=64'},
+  {test: m => /nvidia|nemotron/i.test(m), name: 'NVIDIA', initials: 'NV', logo: 'https://www.google.com/s2/favicons?domain=nvidia.com&sz=64'},
+  {test: m => /microsoft|phi/i.test(m), name: 'Microsoft', initials: 'MS', logo: 'https://www.google.com/s2/favicons?domain=microsoft.com&sz=64'},
+  {test: m => /yi/i.test(m), name: '01.AI', initials: 'YI', logo: 'https://www.google.com/s2/favicons?domain=01.ai&sz=64'},
+  {test: m => /minimax/i.test(m), name: 'MiniMax', initials: 'MX', logo: 'https://www.google.com/s2/favicons?domain=minimaxi.com&sz=64'},
 ];
 
 function profileFor(model) {
@@ -599,6 +622,18 @@ function setTheme(theme) {
 }
 
 const modeToggle = document.getElementById('mode-toggle');
+const toolsOnlyCheck = document.getElementById('tools-only-check');
+
+// Global cache of model info to handle filtering
+let cachedModels = []; 
+
+function renderModelOptions(models, filterTools) {
+  const filtered = filterTools ? models.filter(m => m.supports_tools) : models;
+  modelSelect.innerHTML = filtered.map(m => {
+    const label = m.supports_tools ? `${m.name} 🛠` : m.name;
+    return `<option value="${escapeHtml(m.name)}">${escapeHtml(label)}</option>`;
+  }).join('');
+}
 
 async function switchMode(mode) {
   // Update UI state
@@ -610,19 +645,18 @@ async function switchMode(mode) {
   try {
     const response = await fetch(`/models?mode=${mode}`);
     const data = await response.json();
-    const models = data.models || [];
+    cachedModels = data.models || [];
 
     // Save current selection to see if it's still available
     const current = modelSelect.value;
 
-    // Repopulate dropdown
-    modelSelect.innerHTML = models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+    renderModelOptions(cachedModels, toolsOnlyCheck.checked);
 
     // Try to restore previous selection or pick first available
-    if (current && models.includes(current)) {
+    if (current && cachedModels.find(m => m.name === current)) {
       modelSelect.value = current;
-    } else if (models.length > 0) {
-      modelSelect.value = models[0];
+    } else if (modelSelect.options.length > 0) {
+      modelSelect.value = modelSelect.options[0].value;
       // If we changed models, load its history
       await loadHistory(modelSelect.value);
     }
@@ -634,6 +668,18 @@ async function switchMode(mode) {
     setStatus('ready');
   }
 }
+
+toolsOnlyCheck.addEventListener('change', () => {
+  const current = modelSelect.value;
+  renderModelOptions(cachedModels, toolsOnlyCheck.checked);
+  // Keep selection if it's still there, otherwise pick first
+  if (Array.from(modelSelect.options).find(o => o.value === current)) {
+    modelSelect.value = current;
+  } else if (modelSelect.options.length > 0) {
+    modelSelect.value = modelSelect.options[0].value;
+    loadHistory(modelSelect.value);
+  }
+});
 
 modeToggle.addEventListener('click', (e) => {
   const btn = e.target.closest('.mode-btn');
@@ -724,9 +770,10 @@ async function loadHistory(model = modelSelect.value) {
     if (!response.ok) return;
     const data = await response.json();
 
-    // Determine mode from model name
-    const isCloud = (data.cloud_models || []).includes(model) || (model.includes('/') && !(data.local_models || []).includes(model));
-    const mode = isCloud ? 'cloud' : 'local';
+    // Update global cache
+    const isCloudNow = (data.cloud_models || []).some(m => m.name === model) || (model.includes('/') && !(data.local_models || []).some(m => m.name === model));
+    cachedModels = isCloudNow ? (data.cloud_models || []) : (data.local_models || []);
+    const mode = isCloudNow ? 'cloud' : 'local';
 
     // Update toggle state
     document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -735,10 +782,10 @@ async function loadHistory(model = modelSelect.value) {
 
     // Update dropdown options if needed
     const currentModels = Array.from(modelSelect.options).map(o => o.value);
-    const targetModels = isCloud ? (data.cloud_models || []) : (data.local_models || []);
+    const targetModelNames = cachedModels.map(m => m.name);
 
-    if (targetModels.length > 0 && JSON.stringify(currentModels) !== JSON.stringify(targetModels)) {
-      modelSelect.innerHTML = targetModels.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+    if (targetModelNames.length > 0 && JSON.stringify(currentModels) !== JSON.stringify(targetModelNames)) {
+      renderModelOptions(cachedModels, toolsOnlyCheck.checked);
     }
 
     if (data.model && modelSelect.querySelector(`option[value="${CSS.escape(data.model)}"]`)) {
