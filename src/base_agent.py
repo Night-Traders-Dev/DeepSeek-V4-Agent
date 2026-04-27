@@ -5,7 +5,7 @@ Responsibilities:
   1. Construct API payloads (messages + tool schemas).
   2. Parse both Puter-format and OpenAI-format responses.
   3. Run the tool-call loop until the model produces a text-only response.
-  4. Stream the final user-facing response to stdout.
+  4. Print and return the final user-facing response.
 """
 from __future__ import annotations
 import json
@@ -30,6 +30,7 @@ class BaseAgent:
         self.system_prompt = system_prompt
         self.registry      = ToolRegistry()
         self._headers      = {**config.API_HEADERS, "Authorization": f"Bearer {token}"}
+        self._last_error: str | None = None
 
     # ── Tool registration ─────────────────────────────────────────────────────
 
@@ -39,60 +40,113 @@ class BaseAgent:
 
     # ── API layer ─────────────────────────────────────────────────────────────
 
-    def _call(self, messages: list[dict]) -> dict | None:
-        """Collects a full streaming response and returns it as a parsed dict."""
+    def _api_error_from_payload(self, data: object) -> str | None:
+        """Return a readable error if the API produced an error-shaped payload."""
+        if not isinstance(data, dict):
+            return None
 
-        payload: dict = {
-            "interface": "puter-chat-completion",
-            "driver":    "openai",
-            "method":    "complete",
-            "args": {
-                "model":    config.MODEL,
-                "messages": messages,
-                "stream":   True,
-            }
+        error = data.get("error")
+        message = data.get("message")
+        code = data.get("code")
+
+        if isinstance(error, dict):
+            message = error.get("message") or message
+            code = error.get("code") or code
+        elif isinstance(error, str):
+            message = error
+
+        if data.get("success") is False or error or (message and code):
+            parts = [str(message or "API request failed")]
+            if code:
+                parts.append(f"code: {code}")
+
+            attempts = data.get("attempts")
+            if isinstance(attempts, list) and attempts:
+                summaries = []
+                for attempt in attempts[:2]:
+                    if not isinstance(attempt, dict):
+                        continue
+                    provider = attempt.get("provider") or attempt.get("model") or "provider"
+                    detail = str(attempt.get("error") or "").replace("\n", " ")
+                    if len(detail) > 180:
+                        detail = detail[:177] + "..."
+                    summaries.append(f"{provider}: {detail}")
+                if summaries:
+                    parts.append("; ".join(summaries))
+
+            return " | ".join(parts)
+
+        return None
+
+    def _record_error(self, message: str) -> None:
+        self._last_error = message
+        print(f"\n[{self.name}] {message}")
+
+    def _decode_json_response(self, resp: requests.Response) -> dict | None:
+        try:
+            data = resp.json()
+        except ValueError:
+            preview = resp.text[:400].replace("\n", " ")
+            self._record_error(f"HTTP {resp.status_code}: non-JSON API response: {preview}")
+            return None
+
+        api_error = self._api_error_from_payload(data)
+        if resp.status_code >= 400 or api_error:
+            message = api_error or resp.text[:400].replace("\n", " ")
+            self._record_error(f"HTTP {resp.status_code}: {message}")
+            return None
+
+        return data
+
+    def _call(self, messages: list[dict]) -> dict | None:
+        """Run one OpenAI-compatible chat-completion request."""
+
+        self._last_error = None
+        payload_base: dict = {
+            "messages": messages,
+            "stream":   False,
         }
 
         schemas = self.registry.schemas()
         if schemas:
-            payload["tools"]       = schemas
-            payload["tool_choice"] = "auto"
+            payload_base["tools"] = schemas
+            payload_base["tool_choice"] = "auto"
 
-        full_text = []
-        try:
-            resp = requests.post(
-                config.API_URL,
-                headers=self._headers,
-                json=payload,
-                timeout=config.REQUEST_TIMEOUT,
-                stream=True,
-            )
-            resp.raise_for_status()
+        models = [config.MODEL]
+        if schemas:
+            for model in config.TOOL_FALLBACK_MODELS:
+                if model not in models:
+                    models.append(model)
 
-            for raw in resp.iter_lines():
-                if not raw:
+        for attempt, model in enumerate(models):
+            payload = {**payload_base, "model": model}
+            if attempt:
+                print(f"\n[{self.name}] Retrying tool request with {model}.")
+
+            try:
+                resp = requests.post(
+                    config.API_URL,
+                    headers=self._headers,
+                    json=payload,
+                    timeout=config.REQUEST_TIMEOUT,
+                    stream=False,
+                )
+                data = self._decode_json_response(resp)
+            except Exception as exc:
+                self._record_error(f"Request error: {exc}")
+                data = None
+
+            if data is None:
+                continue
+
+            if schemas:
+                text, tool_calls = self._parse_response(data)
+                if not text.strip() and not tool_calls and attempt < len(models) - 1:
+                    self._record_error(f"Model {model} returned an empty tool response.")
                     continue
-                line = raw.decode("utf-8")
-                if line.startswith("data: "):
-                    line = line[6:]
-                if line == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(line)
-                    text = chunk.get("text") or chunk.get("reasoning") or ""
-                    if not text and "choices" in chunk:
-                        text = chunk["choices"][0].get("delta", {}).get("content", "") or ""
-                    if text:
-                        full_text.append(text)
-                except json.JSONDecodeError:
-                    continue
 
-            return {"text": "".join(full_text)}
+            return data
 
-        except requests.HTTPError as exc:
-            print(f"\n[{self.name}] HTTP {exc.response.status_code}: {exc.response.text[:400]}")
-        except Exception as exc:
-            print(f"\n[{self.name}] Request error: {exc}")
         return None
 
 
@@ -114,7 +168,12 @@ class BaseAgent:
                 timeout=config.REQUEST_TIMEOUT,
                 stream=True,
             )
-            resp.raise_for_status()
+            if resp.status_code >= 400 or "application/json" in resp.headers.get("Content-Type", ""):
+                data = self._decode_json_response(resp)
+                if data is None:
+                    return f"[{self.name}] {self._last_error or 'API request failed.'}"
+                text, _tool_calls = self._parse_response(data)
+                return text or f"[{self.name}] Empty API response."
 
             for raw in resp.iter_lines():
                 if not raw:
@@ -126,6 +185,10 @@ class BaseAgent:
                     break
                 try:
                     chunk = json.loads(line)
+                    api_error = self._api_error_from_payload(chunk)
+                    if api_error:
+                        self._record_error(f"API error: {api_error}")
+                        return f"[{self.name}] {self._last_error}"
                     # Puter SSE format: {"text": "..."} or {"reasoning": "..."}
                     text = chunk.get("text") or chunk.get("reasoning") or ""
                     # OpenAI SSE format: choices[0].delta.content
@@ -139,7 +202,8 @@ class BaseAgent:
                     continue
 
         except Exception as exc:
-            print(f"\n[{self.name}] Stream error: {exc}")
+            self._record_error(f"Stream error: {exc}")
+            return f"[{self.name}] {self._last_error}"
 
         print()   # terminal newline
         return "".join(full)
@@ -178,7 +242,7 @@ class BaseAgent:
         Execute a task with the full tool-use loop.
 
         - Loops until the model emits a text-only response (no tool_calls).
-        - Streams the final response to stdout if ``verbose=True``.
+        - Prints the final response to stdout if ``verbose=True``.
         - Returns the final text string (used by the orchestrator).
         """
         messages: list[dict] = [
@@ -189,17 +253,17 @@ class BaseAgent:
         for iteration in range(config.MAX_TOOL_ITERATIONS):
             data = self._call(messages)
             if data is None:
-                return f"[{self.name}] API call failed."
+                return f"[{self.name}] {self._last_error or 'API call failed.'}"
 
             text, tool_calls = self._parse_response(data)
 
             # ── No tool calls → final answer ──────────────────────────────────
             if not tool_calls:
+                final = text or f"[{self.name}] Empty response from model."
                 if verbose:
                     print(f"\n[{self.name}]: ", end="", flush=True)
-                    # Re-issue as a streaming call so the user sees tokens arrive
-                    return self._stream(messages + [{"role": "assistant", "content": text}])
-                return text or f"[{self.name}] (empty response)"
+                    print(final)
+                return final
 
             # ── Tool calls → execute and loop ─────────────────────────────────
             if verbose:

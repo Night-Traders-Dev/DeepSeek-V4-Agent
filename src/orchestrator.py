@@ -121,7 +121,7 @@ class Orchestrator(BaseAgent):
         Process one user turn.
         - Appends to persistent conversation history.
         - Runs orchestrator tool loop (dispatching to experts as needed).
-        - Streams the final synthesised answer to stdout.
+        - Prints the final synthesised answer to stdout.
         - Returns the final answer string.
         """
         self._conversation.append({"role": "user", "content": user_input})
@@ -134,18 +134,18 @@ class Orchestrator(BaseAgent):
         for iteration in range(config.MAX_TOOL_ITERATIONS):
             data = self._call(messages)
             if data is None:
-                err = "Orchestrator: API call failed."
+                err = f"Orchestrator: {self._last_error or 'API call failed.'}"
                 self._conversation.append({"role": "assistant", "content": err})
                 return err
 
             text, tool_calls = self._parse_response(data)
 
-            # ── Final response — stream it ─────────────────────────────────────
+            # ── Final response ────────────────────────────────────────────────
             if not tool_calls:
-                messages.append({"role": "assistant", "content": text})
+                final = text or "Orchestrator: Empty response from model."
+                messages.append({"role": "assistant", "content": final})
                 print("\n🤖 Orchestrator: ", end="", flush=True)
-                # Re-issue as streaming so the user sees tokens arrive
-                final = self._stream(messages)
+                print(final)
                 self._conversation.append({"role": "assistant", "content": final})
                 return final
 

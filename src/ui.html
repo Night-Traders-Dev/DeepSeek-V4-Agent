@@ -331,6 +331,9 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;}
       <div class="model-label">Model</div>
       <select id="model-select" class="model-select">
         <option value="deepseek/deepseek-v4-pro">deepseek/deepseek-v4-pro</option>
+        <option value="deepseek/deepseek-chat-v3.1">deepseek/deepseek-chat-v3.1</option>
+        <option value="deepseek/deepseek-chat">deepseek/deepseek-chat</option>
+        <option value="deepseek/deepseek-r1-0528">deepseek/deepseek-r1-0528</option>
         <option value="anthropic/claude-opus-4-7">anthropic/claude-opus-4-7</option>
         <option value="anthropic/claude-opus-4-6">anthropic/claude-opus-4-6</option>
         <option value="openai/gpt-5.5-pro">openai/gpt-5.5-pro</option>
@@ -462,7 +465,10 @@ async function sendMessage() {
     }
 
     const data = await response.json();
-    appendMessage('assistant', data.reply || 'No reply received.');
+    const reply = typeof data.reply === 'string' && data.reply.trim()
+      ? data.reply
+      : 'Empty response from the server.';
+    appendMessage('assistant', reply);
   } catch (err) {
     appendMessage('assistant', `Error: ${escapeHtml(String(err))}`);
   } finally {

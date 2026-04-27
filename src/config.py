@@ -13,6 +13,9 @@ WORKSPACE   = pathlib.Path.cwd()   # All file tools are scoped to this dir
 API_URL         = "https://api.puter.com/puterai/openai/v1/chat/completions"
 AVAILABLE_MODELS = [
     "deepseek/deepseek-v4-pro",
+    "deepseek/deepseek-chat-v3.1",
+    "deepseek/deepseek-chat",
+    "deepseek/deepseek-r1-0528",
     "anthropic/claude-opus-4-7",
     "anthropic/claude-opus-4-6",
     "openai/gpt-5.5-pro",
@@ -23,6 +26,11 @@ AVAILABLE_MODELS = [
     "google/gemini-3.1-pro-preview",
 ]
 MODEL           = "deepseek/deepseek-v4-pro"
+TOOL_FALLBACK_MODELS = [
+    "deepseek/deepseek-chat-v3.1",
+    "deepseek/deepseek-chat",
+    "openai/gpt-5.5",
+]
 REQUEST_TIMEOUT = 90          # seconds per HTTP request
 MAX_TOOL_ITERATIONS = 12      # hard cap on agentic loops per agent
 
