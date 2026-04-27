@@ -34,22 +34,30 @@ from http import HTTPStatus
 
 def get_available_skills():
     skills = []
-    skills_dir = config.BASE_DIR / "src" / "skills"
+    # Ensure consistent path resolution
+    skills_dir = pathlib.Path(config.BASE_DIR) / "src" / "skills"
+    if not skills_dir.exists():
+        skills_dir.mkdir(parents=True, exist_ok=True)
+        
     for f in skills_dir.glob("*.yaml"):
         with open(f, 'r') as file:
-            skill = yaml.safe_load(file)
-            skill['id'] = f.stem
-            skills.append(skill)
+            try:
+                skill = yaml.safe_load(file)
+                if skill:
+                    skill['id'] = f.stem
+                    skills.append(skill)
+            except Exception:
+                continue
     return skills
 
 def save_skill(name: str, data: dict):
-    skills_dir = config.BASE_DIR / "src" / "skills"
+    skills_dir = pathlib.Path(config.BASE_DIR) / "src" / "skills"
     path = skills_dir / f"{name.lower().replace(' ', '_')}.yaml"
     with open(path, 'w') as f:
         yaml.dump(data, f)
 
 def delete_skill(name: str):
-    skills_dir = config.BASE_DIR / "src" / "skills"
+    skills_dir = pathlib.Path(config.BASE_DIR) / "src" / "skills"
     path = skills_dir / f"{name.lower().replace(' ', '_')}.yaml"
     if path.exists():
         path.unlink()
