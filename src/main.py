@@ -590,6 +590,15 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(usage)
             return
 
+        if path == "/chat":
+            payload = self._parse_json()
+            if not payload or "message" not in payload:
+                self.send_error(HTTPStatus.BAD_REQUEST, "message is required")
+                return
+            reply = self.orchestrator.chat(payload["message"])
+            self._send_json({"reply": reply, "model": config.MODEL, "metrics": self.orchestrator.last_turn_metrics})
+            return
+
         if path == "/profile":
             with self.state_lock:
                 self._send_json({
@@ -651,6 +660,15 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
                 type(self).session_usage = self._empty_usage()
                 session_usage = dict(type(self).session_usage)
             self._send_json({"status": "ok", "session_metrics": session_usage})
+            return
+
+        if path == "/chat":
+            payload = self._parse_json()
+            if not payload or "message" not in payload:
+                self.send_error(HTTPStatus.BAD_REQUEST, "message is required")
+                return
+            reply = self.orchestrator.chat(payload["message"])
+            self._send_json({"reply": reply, "model": config.MODEL, "metrics": self.orchestrator.last_turn_metrics})
             return
 
         if path == "/profile":
