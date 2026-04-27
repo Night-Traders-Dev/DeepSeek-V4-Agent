@@ -735,7 +735,8 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
 from refactor_loop import RefactorLoop
 from orchestrator import Orchestrator
 
-    global active_refactor_loop
+active_refactor_loop = None
+
 def run_web(orchestrator: Orchestrator, memory_manager: MemoryManager, port: int = 0, headless: bool = False) -> None:
     threading.Thread(target=chat_worker, args=(orchestrator,), daemon=True).start()
     handler = BrowserHandler
