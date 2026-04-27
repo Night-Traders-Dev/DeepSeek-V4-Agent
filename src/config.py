@@ -33,6 +33,9 @@ TOOL_FALLBACK_MODELS = [
 ]
 REQUEST_TIMEOUT = 90          # seconds per HTTP request
 MAX_TOOL_ITERATIONS = 12      # hard cap on agentic loops per agent
+MAX_ATTACHMENTS = 6
+MAX_ATTACHMENT_CHARS = 120_000
+MAX_TOTAL_ATTACHMENT_CHARS = 360_000
 
 API_HEADERS = {
     "Content-Type": "application/json",

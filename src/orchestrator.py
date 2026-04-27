@@ -3,7 +3,7 @@ orchestrator.py — Master coordinator that routes tasks to expert agents.
 
 The orchestrator itself is an agent whose "tools" are the four expert agents.
 It receives the user's message, decides which expert(s) to call (via the LLM),
-dispatches to them, and streams a synthesised final answer.
+dispatches to them, and prints a synthesised final answer.
 
 Conversation history is maintained across turns so the orchestrator has full context.
 """
@@ -50,6 +50,7 @@ class Orchestrator(BaseAgent):
         )
         self._token        = token
         self._conversation: list[dict] = []   # persistent across chat() calls
+        self.last_turn_metrics = self.turn_metrics()
         self._register_routing_tools()
 
     # ── Register expert delegation as callable tools ──────────────────────────
@@ -60,6 +61,7 @@ class Orchestrator(BaseAgent):
             print(f"\n  ➤  Delegating to {label}: {task[:90]}{'…' if len(task)>90 else ''}")
             expert = ExpertClass(self._token)
             result = expert.run(task, verbose=True)
+            self._merge_turn_metrics_from(expert)
             print(f"\n  ✓  {label} finished.")
             return result
 
@@ -124,6 +126,7 @@ class Orchestrator(BaseAgent):
         - Prints the final synthesised answer to stdout.
         - Returns the final answer string.
         """
+        self._reset_turn_metrics()
         self._conversation.append({"role": "user", "content": user_input})
 
         messages = [
@@ -136,6 +139,7 @@ class Orchestrator(BaseAgent):
             if data is None:
                 err = f"Orchestrator: {self._last_error or 'API call failed.'}"
                 self._conversation.append({"role": "assistant", "content": err})
+                self.last_turn_metrics = self.turn_metrics()
                 return err
 
             text, tool_calls = self._parse_response(data)
@@ -147,6 +151,7 @@ class Orchestrator(BaseAgent):
                 print("\n🤖 Orchestrator: ", end="", flush=True)
                 print(final)
                 self._conversation.append({"role": "assistant", "content": final})
+                self.last_turn_metrics = self.turn_metrics()
                 return final
 
             # ── Routing decisions — log and execute ───────────────────────────
@@ -173,4 +178,5 @@ class Orchestrator(BaseAgent):
 
         err = "Orchestrator: Max tool iterations reached."
         self._conversation.append({"role": "assistant", "content": err})
+        self.last_turn_metrics = self.turn_metrics()
         return err

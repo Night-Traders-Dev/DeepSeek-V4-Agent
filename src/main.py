@@ -1,5 +1,5 @@
 """
-main.py — Entry point for the multi-agent coding assistant.
+main.py — Entry point for PuterAgent.
 
 Run with:
     python main.py
@@ -15,6 +15,7 @@ import pathlib
 import socketserver
 import sys
 import threading
+import time
 import webbrowser
 from http import HTTPStatus
 
@@ -23,8 +24,8 @@ import config
 
 BANNER = """
 ╔══════════════════════════════════════════════════════════════╗
-║           🤖  Multi-Agent Coding Assistant v2               ║
-║           Powered by DeepSeek v4 Pro via Puter               ║
+║                    PuterAgent v2                            ║
+║           Multi-model coding agents via Puter               ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  Orchestrator  →  CodeExpert  /  FileExpert                  ║
 ║                →  ShellExpert /  DebugExpert                 ║
@@ -36,7 +37,7 @@ BANNER = """
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="DeepSeek multi-agent assistant runner."
+        description="PuterAgent multi-agent assistant runner."
     )
     parser.add_argument(
         "--cli",
@@ -94,6 +95,87 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 class BrowserHandler(http.server.BaseHTTPRequestHandler):
     orchestrator: Orchestrator
+    history: list[dict] = []
+    session_usage: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    state_lock = threading.Lock()
+
+    @staticmethod
+    def _empty_usage() -> dict[str, int]:
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    @staticmethod
+    def _add_usage(target: dict[str, int], usage: dict[str, int]) -> None:
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            target[key] = int(target.get(key, 0)) + int(usage.get(key, 0))
+
+    @staticmethod
+    def _safe_attachment_name(value: object) -> str:
+        name = str(value or "attachment").replace("\\", "/").split("/")[-1].strip()
+        return name[:120] or "attachment"
+
+    def _coerce_attachments(self, payload: dict) -> list[dict]:
+        raw_attachments = payload.get("attachments", [])
+        if not isinstance(raw_attachments, list):
+            return []
+
+        attachments: list[dict] = []
+        total_chars = 0
+        for raw in raw_attachments[:config.MAX_ATTACHMENTS]:
+            if not isinstance(raw, dict):
+                continue
+
+            content = str(raw.get("content") or "")
+            remaining = max(config.MAX_TOTAL_ATTACHMENT_CHARS - total_chars, 0)
+            if remaining <= 0:
+                break
+
+            max_chars = min(config.MAX_ATTACHMENT_CHARS, remaining)
+            truncated = bool(raw.get("truncated")) or len(content) > max_chars
+            content = content[:max_chars]
+            total_chars += len(content)
+
+            attachments.append({
+                "name": self._safe_attachment_name(raw.get("name")),
+                "type": str(raw.get("type") or "text/plain")[:80],
+                "size": int(raw.get("size") or len(content)),
+                "content": content,
+                "truncated": truncated,
+            })
+
+        return attachments
+
+    @staticmethod
+    def _attachment_summaries(attachments: list[dict]) -> list[dict]:
+        return [
+            {
+                "name": item["name"],
+                "type": item["type"],
+                "size": item["size"],
+                "truncated": item["truncated"],
+            }
+            for item in attachments
+        ]
+
+    def _message_with_attachments(self, message: str, attachments: list[dict]) -> str:
+        if not attachments:
+            return message
+
+        sections = [message or "Use the attached files as context for this turn."]
+        sections.append("\nAttached files:")
+        for item in attachments:
+            truncation = " truncated" if item["truncated"] else ""
+            sections.append(
+                f"\n--- {item['name']} ({item['type']}, {item['size']} bytes{truncation}) ---\n"
+                f"{item['content']}"
+            )
+        return "\n".join(sections)
+
+    def _state_payload(self) -> dict:
+        return {
+            "messages": type(self).history,
+            "model": config.MODEL,
+            "session_metrics": dict(type(self).session_usage),
+        }
 
     def _send_json(self, payload: dict, status: int = HTTPStatus.OK) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -138,6 +220,11 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             self._send_html(config.BASE_DIR / "ui.html")
             return
 
+        if path == "/history":
+            with self.state_lock:
+                self._send_json(self._state_payload())
+            return
+
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_POST(self) -> None:
@@ -155,17 +242,61 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
                     return
                 config.MODEL = model_str
             message = str(payload["message"]).strip()
-            if not message:
-                self.send_error(HTTPStatus.BAD_REQUEST, "'message' must not be empty")
+            attachments = self._coerce_attachments(payload)
+            if not message and not attachments:
+                self.send_error(HTTPStatus.BAD_REQUEST, "'message' or attachments are required")
                 return
 
-            reply = self.orchestrator.chat(message)
-            self._send_json({"reply": reply})
+            prompt = self._message_with_attachments(message, attachments)
+            reply = self.orchestrator.chat(prompt)
+            metrics = self.orchestrator.last_turn_metrics
+            usage = metrics.get("usage", self._empty_usage())
+            used_model = metrics.get("last_model") or config.MODEL
+
+            created_at = time.time()
+            attachment_summaries = self._attachment_summaries(attachments)
+            user_record = {
+                "id": f"msg-{int(created_at * 1000)}-user",
+                "role": "user",
+                "content": message,
+                "attachments": attachment_summaries,
+                "model": config.MODEL,
+                "created_at": created_at,
+            }
+            assistant_record = {
+                "id": f"msg-{int(created_at * 1000)}-assistant",
+                "role": "assistant",
+                "content": reply,
+                "model": config.MODEL,
+                "used_model": used_model,
+                "models_used": metrics.get("models", []),
+                "metrics": usage,
+                "created_at": time.time(),
+            }
+
+            with self.state_lock:
+                type(self).history.extend([user_record, assistant_record])
+                self._add_usage(type(self).session_usage, usage)
+                session_usage = dict(type(self).session_usage)
+
+            self._send_json({
+                "reply": reply,
+                "model": config.MODEL,
+                "used_model": used_model,
+                "models_used": metrics.get("models", []),
+                "metrics": usage,
+                "session_metrics": session_usage,
+                "messages": [user_record, assistant_record],
+            })
             return
 
         if path == "/clear":
             self.orchestrator._conversation.clear()
-            self._send_json({"status": "ok"})
+            with self.state_lock:
+                type(self).history.clear()
+                type(self).session_usage = self._empty_usage()
+                session_usage = dict(type(self).session_usage)
+            self._send_json({"status": "ok", "session_metrics": session_usage})
             return
 
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
@@ -178,6 +309,9 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
 def run_web(orchestrator: Orchestrator, port: int = 0) -> None:
     handler = BrowserHandler
     handler.orchestrator = orchestrator
+    handler.history = []
+    handler.session_usage = BrowserHandler._empty_usage()
+    handler.state_lock = threading.Lock()
 
     with ThreadedHTTPServer(("127.0.0.1", port), handler) as server:
         host, actual_port = server.server_address

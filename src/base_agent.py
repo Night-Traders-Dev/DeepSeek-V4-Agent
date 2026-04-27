@@ -31,6 +31,10 @@ class BaseAgent:
         self.registry      = ToolRegistry()
         self._headers      = {**config.API_HEADERS, "Authorization": f"Bearer {token}"}
         self._last_error: str | None = None
+        self._last_model: str | None = None
+        self._last_usage = self._empty_usage()
+        self._turn_usage = self._empty_usage()
+        self._turn_models: list[str] = []
 
     # ── Tool registration ─────────────────────────────────────────────────────
 
@@ -39,6 +43,59 @@ class BaseAgent:
             self.registry.register(tool)
 
     # ── API layer ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _empty_usage() -> dict[str, int]:
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    @classmethod
+    def _normalise_usage(cls, data: object) -> dict[str, int]:
+        if not isinstance(data, dict):
+            return cls._empty_usage()
+
+        usage = data.get("usage")
+        if not isinstance(usage, dict):
+            return cls._empty_usage()
+
+        prompt = usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0
+        completion = usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0
+        total = usage.get("total_tokens", prompt + completion) or 0
+        return {
+            "prompt_tokens": int(prompt),
+            "completion_tokens": int(completion),
+            "total_tokens": int(total),
+        }
+
+    @staticmethod
+    def _add_usage(target: dict[str, int], usage: dict[str, int]) -> None:
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            target[key] = int(target.get(key, 0)) + int(usage.get(key, 0))
+
+    def _reset_turn_metrics(self) -> None:
+        self._last_model = None
+        self._last_usage = self._empty_usage()
+        self._turn_usage = self._empty_usage()
+        self._turn_models = []
+
+    def _record_response_metadata(self, data: dict, fallback_model: str) -> None:
+        self._last_model = str(data.get("model") or fallback_model)
+        self._last_usage = self._normalise_usage(data)
+        self._add_usage(self._turn_usage, self._last_usage)
+        if self._last_model not in self._turn_models:
+            self._turn_models.append(self._last_model)
+
+    def _merge_turn_metrics_from(self, agent: "BaseAgent") -> None:
+        self._add_usage(self._turn_usage, agent._turn_usage)
+        for model in agent._turn_models:
+            if model not in self._turn_models:
+                self._turn_models.append(model)
+
+    def turn_metrics(self) -> dict:
+        return {
+            "usage": dict(self._turn_usage),
+            "models": list(self._turn_models),
+            "last_model": self._last_model,
+        }
 
     def _api_error_from_payload(self, data: object) -> str | None:
         """Return a readable error if the API produced an error-shaped payload."""
@@ -145,6 +202,8 @@ class BaseAgent:
                     self._record_error(f"Model {model} returned an empty tool response.")
                     continue
 
+            self._last_error = None
+            self._record_response_metadata(data, model)
             return data
 
         return None
@@ -245,6 +304,7 @@ class BaseAgent:
         - Prints the final response to stdout if ``verbose=True``.
         - Returns the final text string (used by the orchestrator).
         """
+        self._reset_turn_metrics()
         messages: list[dict] = [
             {"role": "system",  "content": self.system_prompt},
             {"role": "user",    "content": task},
