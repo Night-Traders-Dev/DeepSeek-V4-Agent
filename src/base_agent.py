@@ -310,7 +310,7 @@ class BaseAgent:
     def _parse_response(self, data: dict) -> tuple[str, list[dict]]:
         """
         Returns (text_content, tool_calls).
-        Handles both Puter and OpenAI response shapes, including nested 'result'.
+        Handles Puter, OpenAI, and Ollama response shapes.
         """
         if not data:
             return "", []
@@ -321,6 +321,17 @@ class BaseAgent:
             text       = msg.get("content") or ""
             tool_calls = msg.get("tool_calls") or []
             return text, tool_calls
+
+        # Ollama format: {"message": {"role": "assistant", "content": "...", "thinking": "..."}}
+        if "message" in data:
+            msg = data["message"]
+            content = msg.get("content") or ""
+            thinking = msg.get("thinking")
+            if thinking:
+                # Prepend thinking if present, wrapped in a style the UI can handle or just as text
+                content = f"> Thinking: {thinking}\n\n{content}"
+            tool_calls = msg.get("tool_calls") or []
+            return content, tool_calls
 
         # Puter simple format: {"text": "..."}
         if "text" in data:

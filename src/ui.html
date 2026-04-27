@@ -725,7 +725,7 @@ async function loadHistory(model = modelSelect.value) {
     const data = await response.json();
 
     // Determine mode from model name
-    const isCloud = (data.cloud_models || []).includes(model) || model.includes('/');
+    const isCloud = (data.cloud_models || []).includes(model) || (model.includes('/') && !(data.local_models || []).includes(model));
     const mode = isCloud ? 'cloud' : 'local';
 
     // Update toggle state
