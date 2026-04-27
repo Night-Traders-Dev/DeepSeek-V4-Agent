@@ -300,6 +300,8 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             "model": config.MODEL,
             "session_metrics": dict(type(self).session_usage),
             "profile": self.memory_manager.load_profile(),
+            "local_models": config.LOCAL_MODELS,
+            "cloud_models": config.CLOUD_MODELS,
             "available_models": config.AVAILABLE_MODELS,
             "themes": self.memory_manager.available_themes(),
         }
@@ -382,6 +384,16 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             self._load_model_history(model)
             with self.state_lock:
                 self._send_json(self._state_payload())
+            return
+
+        if path == "/models":
+            query = urllib.parse.urlparse(self.path).query
+            params = urllib.parse.parse_qs(query)
+            mode = params.get("mode", ["local"])[0].lower()
+            if mode == "cloud":
+                self._send_json({"models": config.CLOUD_MODELS})
+            else:
+                self._send_json({"models": config.LOCAL_MODELS})
             return
 
         if path == "/profile":

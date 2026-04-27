@@ -78,6 +78,16 @@ aside .spacer{flex:1;}
   padding:14px 18px;border-top:1px solid var(--border);
   display:flex;flex-direction:column;gap:10px;
 }
+.mode-toggle{
+  display:flex;background:rgba(243,237,228,.05);border:1px solid rgba(255,255,255,.1);
+  border-radius:8px;padding:2px;margin-bottom:8px;
+}
+.mode-btn{
+  flex:1;padding:6px;border:none;background:transparent;color:var(--muted);
+  font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1px;
+  cursor:pointer;border-radius:6px;transition:all .15s;
+}
+.mode-btn.active{background:var(--orange);color:#fff;}
 .model-label{
   font-family:var(--mono);font-size:10px;color:var(--muted);
   text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;
@@ -306,6 +316,10 @@ textarea{resize:vertical;min-height:84px;}
 
   <div class="spacer"></div>
   <div class="sidebar-foot">
+    <div class="mode-toggle" id="mode-toggle">
+      <button class="mode-btn active" data-mode="local">Local</button>
+      <button class="mode-btn" data-mode="cloud">Cloud</button>
+    </div>
     <div>
       <div class="model-label">Model</div>
       <select id="model-select" class="model-select">
@@ -470,13 +484,18 @@ const MODEL_PROFILES = [
   {test: m => m.startsWith('neural-chat'), name: 'Neural Chat', initials: 'NC', logo: 'https://www.google.com/s2/favicons?domain=intel.com&sz=64'},
   {test: m => m.startsWith('mistral'), name: 'Mistral', initials: 'M', logo: 'https://www.google.com/s2/favicons?domain=mistral.ai&sz=64'},
   {test: m => m.startsWith('llama'), name: 'Llama', initials: 'LL', logo: 'https://www.google.com/s2/favicons?domain=meta.com&sz=64'},
+  {test: m => m.startsWith('anthropic') || m.includes('claude'), name: 'Anthropic', initials: 'A', logo: 'https://www.google.com/s2/favicons?domain=anthropic.com&sz=64'},
+  {test: m => m.startsWith('openai') || m.startsWith('gpt'), name: 'OpenAI', initials: 'O', logo: 'https://www.google.com/s2/favicons?domain=openai.com&sz=64'},
+  {test: m => m.startsWith('google') || m.startsWith('gemini'), name: 'Google', initials: 'G', logo: 'https://www.google.com/s2/favicons?domain=google.com&sz=64'},
+  {test: m => m.startsWith('moonshot') || m.includes('kimi'), name: 'Moonshot', initials: 'K', logo: 'https://www.google.com/s2/favicons?domain=moonshot.cn&sz=64'},
+  {test: m => m.startsWith('x-ai') || m.includes('grok'), name: 'xAI', initials: 'X', logo: 'https://www.google.com/s2/favicons?domain=x.ai&sz=64'},
 ];
 
 function profileFor(model) {
-  const value = model || modelSelect.value;
+  const value = String(model || modelSelect.value || '');
   return MODEL_PROFILES.find(item => item.test(value)) || {
     name: value.split(':')[0] || value.split('/')[0] || 'Model',
-    initials: (value.slice(0, 2) || 'M').toUpperCase(),
+    initials: (value.replace(/^[^a-zA-Z0-9]+/, '').slice(0, 2) || 'M').toUpperCase(),
     logo: '',
   };
 }
@@ -559,6 +578,50 @@ function setTheme(theme) {
   localStorage.setItem('puter-theme', theme);
 }
 
+const modeToggle = document.getElementById('mode-toggle');
+
+async function switchMode(mode) {
+  // Update UI state
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+
+  setStatus('loading models...', true);
+  try {
+    const response = await fetch(`/models?mode=${mode}`);
+    const data = await response.json();
+    const models = data.models || [];
+
+    // Save current selection to see if it's still available
+    const current = modelSelect.value;
+
+    // Repopulate dropdown
+    modelSelect.innerHTML = models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+
+    // Try to restore previous selection or pick first available
+    if (current && models.includes(current)) {
+      modelSelect.value = current;
+    } else if (models.length > 0) {
+      modelSelect.value = models[0];
+      // If we changed models, load its history
+      await loadHistory(modelSelect.value);
+    }
+    updateActiveModel(modelSelect.value);
+  } catch (err) {
+    console.error('Failed to switch mode', err);
+    setStatus('error loading models');
+  } finally {
+    setStatus('ready');
+  }
+}
+
+modeToggle.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mode-btn');
+  if (btn && !btn.classList.contains('active')) {
+    switchMode(btn.dataset.mode);
+  }
+});
+
 async function loadProfileSettings() {
   try {
     const response = await fetch('/profile');
@@ -640,6 +703,24 @@ async function loadHistory(model = modelSelect.value) {
     const response = await fetch(`/history?model=${encodeURIComponent(model)}`);
     if (!response.ok) return;
     const data = await response.json();
+
+    // Determine mode from model name
+    const isCloud = (data.cloud_models || []).includes(model) || model.includes('/');
+    const mode = isCloud ? 'cloud' : 'local';
+
+    // Update toggle state
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+
+    // Update dropdown options if needed
+    const currentModels = Array.from(modelSelect.options).map(o => o.value);
+    const targetModels = isCloud ? (data.cloud_models || []) : (data.local_models || []);
+
+    if (targetModels.length > 0 && JSON.stringify(currentModels) !== JSON.stringify(targetModels)) {
+      modelSelect.innerHTML = targetModels.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+    }
+
     if (data.model && modelSelect.querySelector(`option[value="${CSS.escape(data.model)}"]`)) {
       modelSelect.value = data.model;
     }

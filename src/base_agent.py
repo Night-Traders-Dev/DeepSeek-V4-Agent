@@ -29,12 +29,24 @@ class BaseAgent:
         self.name          = name
         self.system_prompt = system_prompt
         self.registry      = ToolRegistry()
-        self._headers      = {**config.API_HEADERS, "Authorization": f"Bearer {token}"}
+        self._token        = token
         self._last_error: str | None = None
         self._last_model: str | None = None
         self._last_usage = self._empty_usage()
         self._turn_usage = self._empty_usage()
         self._turn_models: list[str] = []
+
+    def _get_api_config(self, model: str) -> tuple[str, dict]:
+        """Returns (url, headers) for the given model."""
+        if model in config.CLOUD_MODELS or "/" in str(model):
+            # Cloud models use Puter API and the real token
+            url = config.CLOUD_API_URL
+            headers = {**config.API_HEADERS, "Authorization": f"Bearer {self._token}"}
+        else:
+            # Local models use Ollama and usually no auth
+            url = config.LOCAL_API_URL
+            headers = dict(config.API_HEADERS)
+        return url, headers
 
     # ── Tool registration ─────────────────────────────────────────────────────
 
@@ -203,10 +215,11 @@ class BaseAgent:
             if attempt:
                 print(f"\n[{self.name}] Retrying tool request with {model}.")
 
+            url, headers = self._get_api_config(model)
             try:
                 resp = requests.post(
-                    config.API_URL,
-                    headers=self._headers,
+                    url,
+                    headers=headers,
                     json=payload,
                     timeout=config.REQUEST_TIMEOUT,
                     stream=False,
@@ -239,13 +252,15 @@ class BaseAgent:
         Returns the complete assembled text.
         Strips tool schemas for the final answer pass (no tool calls during streaming).
         """
-        payload = {"model": config.MODEL, "messages": messages, "stream": True}
+        model = config.MODEL
+        payload = {"model": model, "messages": messages, "stream": True}
+        url, headers = self._get_api_config(model)
         full: list[str] = []
 
         try:
             resp = requests.post(
-                config.API_URL,
-                headers=self._headers,
+                url,
+                headers=headers,
                 json=payload,
                 timeout=config.REQUEST_TIMEOUT,
                 stream=True,
