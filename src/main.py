@@ -20,6 +20,17 @@ import urllib.parse
 import webbrowser
 from http import HTTPStatus
 
+def get_local_ollama_models() -> list[str]:
+    """Fetch the list of pulled models from local Ollama instance."""
+    try:
+        resp = requests.get("http://localhost:11434/api/tags", timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            return [m["name"] for m in data.get("models", [])]
+    except Exception:
+        pass
+    return config.LOCAL_MODELS
+
 from orchestrator import Orchestrator
 from file_tools import _safe_path
 from shell_tools import _run_shell
@@ -295,14 +306,15 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
         return "\n".join(sections)
 
     def _state_payload(self) -> dict:
+        local_models = get_local_ollama_models()
         return {
             "messages": type(self).history,
             "model": config.MODEL,
             "session_metrics": dict(type(self).session_usage),
             "profile": self.memory_manager.load_profile(),
-            "local_models": config.LOCAL_MODELS,
+            "local_models": local_models,
             "cloud_models": config.CLOUD_MODELS,
-            "available_models": config.AVAILABLE_MODELS,
+            "available_models": local_models + config.CLOUD_MODELS,
             "themes": self.memory_manager.available_themes(),
         }
 
@@ -377,8 +389,9 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             query = urllib.parse.urlparse(self.path).query
             params = urllib.parse.parse_qs(query)
             model = params.get("model", [config.MODEL])[0]
-            if model not in config.AVAILABLE_MODELS:
-                self.send_error(HTTPStatus.BAD_REQUEST, "Invalid model selection")
+            available = get_local_ollama_models() + config.CLOUD_MODELS
+            if model not in available:
+                self.send_error(HTTPStatus.BAD_REQUEST, f"Invalid model selection: {model}")
                 return
             config.MODEL = model
             self._load_model_history(model)
@@ -393,7 +406,7 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             if mode == "cloud":
                 self._send_json({"models": config.CLOUD_MODELS})
             else:
-                self._send_json({"models": config.LOCAL_MODELS})
+                self._send_json({"models": get_local_ollama_models()})
             return
 
         if path == "/profile":
@@ -420,8 +433,9 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             model = payload.get("model")
             if model:
                 model_str = str(model).strip()
-                if model_str not in config.AVAILABLE_MODELS:
-                    self.send_error(HTTPStatus.BAD_REQUEST, "Invalid model selection")
+                available = get_local_ollama_models() + config.CLOUD_MODELS
+                if model_str not in available:
+                    self.send_error(HTTPStatus.BAD_REQUEST, f"Invalid model selection: {model_str}")
                     return
                 if model_str != config.MODEL:
                     config.MODEL = model_str
