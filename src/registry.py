@@ -102,7 +102,7 @@ class ToolRegistry:
             if isinstance(arguments, dict):
                 kwargs = arguments
             else:
-                kwargs = json.loads(arguments) if arguments.strip() else {}
+                kwargs = json.loads(arguments.replace("```json", "").replace("```", "").strip()) if arguments.strip() else {}
             return tool.execute(**kwargs)
         except json.JSONDecodeError as exc:
             return json.dumps({"success": False, "error": f"Malformed arguments JSON: {exc}"})
