@@ -54,8 +54,10 @@ DEFAULT_USER_PROFILE = {
     "bio": "A practical, detail-oriented software engineer who appreciates concise technical answers and clear explanations.",
     "preferences": "Use my name, remember my role and preferences, and keep recommendations actionable.",
     "theme": "sunset-boulevard",
+    "expert_model": "qwen2.5-coder:7b",
 }
 MODEL           = "qwen2.5-coder:14b"
+EXPERT_MODEL    = "qwen2.5-coder:7b"
 TOOL_FALLBACK_MODELS = [
     "qwen2.5-coder:7b",
     "deepseek-coder:6.7b",

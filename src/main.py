@@ -18,8 +18,15 @@ import threading
 import time
 import urllib.parse
 import webbrowser
-import requests
-from http import HTTPStatus
+import yaml
+
+def get_available_skills():
+    skills = []
+    skills_dir = config.BASE_DIR / "src" / "skills"
+    for f in skills_dir.glob("*.yaml"):
+        with open(f, 'r') as file:
+            skills.append(yaml.safe_load(file))
+    return skills
 
 LOCAL_MODEL_DETAILS_CACHE: dict[str, dict] = {}
 
@@ -467,6 +474,21 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json({"models": get_local_ollama_models()})
             return
 
+        if path == "/stop":
+            self.orchestrator.stop()
+            self._send_json({"status": "stopping"})
+            return
+
+        if path == "/status":
+            logs = self.orchestrator.status_logs
+            self.orchestrator.status_logs = []  # Clear after reading
+            self._send_json({"logs": logs})
+            return
+
+        if path == "/skills":
+            self._send_json({"skills": get_available_skills()})
+            return
+
         if path == "/usage":
             token = config.load_token()
             usage = get_puter_usage(token)
@@ -574,7 +596,23 @@ class BrowserHandler(http.server.BaseHTTPRequestHandler):
             profile.update({k: v for k, v in payload.items() if k in profile})
             if "theme" in payload:
                 profile["theme"] = str(payload["theme"]).strip() or profile.get("theme", config.DEFAULT_USER_PROFILE["theme"])
+            if "expert_model" in payload:
+                profile["expert_model"] = str(payload["expert_model"]).strip() or profile.get("expert_model", config.DEFAULT_USER_PROFILE["expert_model"])
+            if "model" in payload:
+                profile["model"] = str(payload["model"]).strip() or profile.get("model", config.DEFAULT_USER_PROFILE["model"])
+            if "skill" in payload:
+                profile["skill"] = str(payload["skill"]).strip() or profile.get("skill", "Default")
+            if "tool_limit" in payload:
+                profile["tool_limit"] = int(payload["tool_limit"])
+            
             self.memory_manager.save_profile(profile)
+            # Update config runtime
+            config.MAX_TOOL_ITERATIONS = profile.get("tool_limit", 12)
+            self.orchestrator.set_skill(profile.get("skill", "Default"))
+            
+            if "expert_model" in profile:
+                config.EXPERT_MODEL = profile["expert_model"]
+            
             self._refresh_profile_prompt()
             self._send_json({"status": "ok", "profile": profile})
             return

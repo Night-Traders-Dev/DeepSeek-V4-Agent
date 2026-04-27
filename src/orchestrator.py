@@ -43,40 +43,63 @@ DELEGATION RULES
 
 class Orchestrator(BaseAgent):
     def __init__(self, token: str, profile: dict | None = None) -> None:
-        system_prompt = ORCHESTRATOR_PROMPT
+        self.system_prompt = ORCHESTRATOR_PROMPT
         if profile:
             profile_lines = [f"{k.title()}: {v}" for k, v in profile.items() if v and k != "theme"]
-            system_prompt += "\n\nUSER PROFILE\n" + "\n".join(profile_lines)
-            system_prompt += "\n\nINSTRUCTIONS\n- Always refer to the user by name when available.\n- Remember the user’s role, preferences, and orientation.\n- Adapt answers to the user’s background and keep recommendations actionable.\n"
+            self.system_prompt += "\n\nUSER PROFILE\n" + "\n".join(profile_lines)
+            self.system_prompt += "\n\nINSTRUCTIONS\n- Always refer to the user by name when available.\n- Remember the user’s role, preferences, and orientation.\n- Adapt answers to the user’s background and keep recommendations actionable.\n"
 
         super().__init__(
             name="Orchestrator",
-            system_prompt=system_prompt,
+            system_prompt=self.system_prompt,
             token=token,
         )
         self._token        = token
         self._conversation: list[dict] = []   # persistent across chat() calls
         self.last_turn_metrics = self.turn_metrics()
+        self.status_logs: list[str] = []
+        self.interrupted = False
         self._register_routing_tools()
 
-    def set_profile(self, profile: dict | None) -> None:
-        if not profile:
-            return
-        profile_lines = [f"{k.title()}: {v}" for k, v in profile.items() if v and k != "theme"]
-        system_prompt = ORCHESTRATOR_PROMPT + "\n\nUSER PROFILE\n" + "\n".join(profile_lines)
-        system_prompt += "\n\nINSTRUCTIONS\n- Always refer to the user by name when available.\n- Remember the user’s role, preferences, and orientation.\n- Adapt answers to the user’s background and keep recommendations actionable.\n"
-        self.system_prompt = system_prompt
+    def stop(self) -> None:
+        self.interrupted = True
+
+    def _should_continue(self) -> bool:
+        if self.interrupted:
+            self.interrupted = False
+            return False
+        return True
+
+    def set_skill(self, skill_name: str) -> None:
+        skills_dir = config.BASE_DIR / "src" / "skills"
+        skill_file = skills_dir / f"{skill_name}.yaml"
+        if skill_file.exists():
+            import yaml
+            with open(skill_file, 'r') as f:
+                skill = yaml.safe_load(f)
+                self.system_prompt = skill["prompt"]
+        else:
+            self.system_prompt = ORCHESTRATOR_PROMPT
+
+    def _log(self, msg: str) -> None:
+        self.status_logs.append(msg)
+        print(msg)
 
     # ── Register expert delegation as callable tools ──────────────────────────
 
     def _register_routing_tools(self) -> None:
 
         def _delegate(ExpertClass, label: str, task: str) -> str:
-            print(f"\n  ➤  Delegating to {label}: {task[:90]}{'…' if len(task)>90 else ''}")
+            self._log(f"\n  ➤  Delegating to {label}: {task[:90]}{'…' if len(task)>90 else ''}")
             expert = ExpertClass(self._token)
+            # Override model for experts to be the lighter 'expert_model'
+            original_model = config.MODEL
+            config.MODEL = config.EXPERT_MODEL
             result = expert.run(task, verbose=True)
+            config.MODEL = original_model
+            
             self._merge_turn_metrics_from(expert)
-            print(f"\n  ✓  {label} finished.")
+            self._log(f"\n  ✓  {label} finished.")
             return result
 
         routing_tools = [
@@ -149,6 +172,8 @@ class Orchestrator(BaseAgent):
         ]
 
         for iteration in range(config.MAX_TOOL_ITERATIONS):
+            if not self._should_continue():
+                return "Orchestrator: Generation interrupted."
             data = self._call(messages)
             if data is None:
                 err = f"Orchestrator: {self._last_error or 'API call failed.'}"
@@ -169,10 +194,9 @@ class Orchestrator(BaseAgent):
                 return final
 
         # ── Routing decisions — log and execute ───────────────────────────
-            for tc in tool_calls:
-                fn_name = tc.get("function", {}).get("name", "?")
-                print(f"\n  🔀 Orchestrator routing → {fn_name}")
-
+        for tc in tool_calls:
+            fn_name = tc.get("function", {}).get("name", "?")
+            self._log(f"\n  🔀 Orchestrator routing → {fn_name}")
             # Pruning: The orchestrator doesn't need to pass tools to itself, 
             # but it dispatches to experts. Expert call results are appended as tool messages.
             messages.append({
