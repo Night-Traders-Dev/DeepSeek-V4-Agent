@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --orange:  #e76f51;
+  --coral:   #f4a261;
+  --sand:    #e9c46a;
+  --teal:    #264653;
+  --teal2:   #2a5061;
+  --teal3:   #1c3542;
+  --bg:      #162833;
+  --surface: rgba(38,70,83,.55);
+  --border:  rgba(244,162,97,.18);
+  --border2: rgba(244,162,97,.32);
+  --text:    #f3ede4;
+  --muted:   rgba(243,237,228,.52);
+  --mono: 'JetBrains Mono', monospace;
+  --serif: 'Playfair Display', serif;
+  --sans: 'DM Sans', sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);display:flex;}
+
+/* ── Sidebar ────────────────────────────────── */
+aside{
+  width:248px;flex-shrink:0;
+  background:var(--teal);
+  display:flex;flex-direction:column;
+  border-right:1px solid var(--border);
+}
+.brand{
+  padding:22px 20px 18px;
+  border-bottom:1px solid var(--border);
+}
+.brand-logo{
+  display:flex;align-items:center;gap:10px;margin-bottom:4px;
+}
+.brand-icon{
+  width:32px;height:32px;border-radius:8px;
+  background:linear-gradient(135deg,var(--orange),var(--coral));
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;
+}
+.brand h1{
+  font-family:var(--serif);font-size:17px;
+  color:var(--coral);letter-spacing:-.2px;
+}
+.brand-sub{
+  font-family:var(--mono);font-size:10px;color:var(--muted);
+  padding-left:42px;
+}
+
+.agents-label{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:1.4px;
+  text-transform:uppercase;color:var(--muted);
+  padding:18px 20px 10px;
+}
+
+.agent-row{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 20px;transition:background .15s;
+  cursor:default;
+}
+.agent-row.lit{background:rgba(231,111,81,.12);}
+.dot{
+  width:8px;height:8px;border-radius:50%;
+  background:#3a5d6d;flex-shrink:0;
+  transition:background .3s,box-shadow .3s;
+}
+.dot.active{background:var(--orange);box-shadow:0 0 7px var(--orange);}
+.dot.busy{
+  background:var(--sand);
+  animation:blink 1.1s ease-in-out infinite;
+}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.35;}}
+.agent-name{font-size:13px;font-weight:500;}
+.agent-cap{font-family:var(--mono);font-size:10px;color:var(--muted);}
+
+aside .spacer{flex:1;}
+.sidebar-foot{
+  padding:14px 20px;
+  border-top:1px solid var(--border);
+  display:flex;flex-direction:column;gap:8px;
+}
+.model-pill{
+  font-family:var(--mono);font-size:10px;
+  color:var(--sand);
+  background:rgba(233,196,106,.1);
+  border:1px solid rgba(233,196,106,.22);
+  border-radius:100px;padding:4px 10px;
+  align-self:flex-start;
+}
+#clear-btn{
+  width:100%;padding:8px;cursor:pointer;
+  background:rgba(231,111,81,.08);
+  border:1px solid rgba(231,111,81,.28);
+  border-radius:7px;
+  color:var(--coral);font-family:var(--sans);font-size:12px;
+  transition:background .15s;
+}
+#clear-btn:hover{background:rgba(231,111,81,.18);}
+
+/* ── Main ───────────────────────────────────── */
+main{flex:1;display:flex;flex-direction:column;min-width:0;}
+
+.topbar{
+  padding:14px 22px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.topbar-title{font-size:13px;color:var(--muted);}
+#status-label{
+  font-family:var(--mono);font-size:11px;
+  color:var(--muted);transition:color .3s;
+}
+#status-label.working{color:var(--coral);}
+
+/* ── Messages ───────────────────────────────── */
+#messages{
+  flex:1;overflow-y:auto;
+  padding:24px;
+  display:flex;flex-direction:column;gap:14px;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(244,162,97,.2) transparent;
+}
+#messages::-webkit-scrollbar{width:3px;}
+#messages::-webkit-scrollbar-thumb{background:rgba(244,162,97,.2);border-radius:2px;}
+
+/* welcome */
+.welcome{
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  flex:1;text-align:center;padding:40px 20px;
+  gap:0;
+}
+.welcome-glyph{
+  font-family:var(--serif);font-size:52px;
+  color:var(--coral);opacity:.18;
+  line-height:1;margin-bottom:20px;
+  user-select:none;
+}
+.welcome h2{
+  font-family:var(--serif);font-size:26px;
+  color:var(--coral);margin-bottom:8px;
+}
+.welcome p{font-size:14px;color:var(--muted);line-height:1.65;max-width:380px;}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;justify-content:center;}
+.chip{
+  padding:7px 14px;cursor:pointer;
+  background:rgba(244,162,97,.07);
+  border:1px solid var(--border);
+  border-radius:100px;
+  font-size:12.5px;color:var(--coral);
+  transition:background .15s,border-color .15s;
+}
+.chip:hover{background:rgba(244,162,97,.16);border-color:var(--border2);}
+
+/* message bubbles */
+.msg{display:flex;flex-direction:column;gap:5px;animation:fadeUp .2s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(7px);}to{opacity:1;transform:translateY(0);}}
+.msg-user{align-items:flex-end;}
+.msg-agent{align-items:flex-start;}
+.msg-meta{font-family:var(--mono);font-size:10.5px;color:var(--muted);padding:0 4px;}
+.bubble{
+  max-width:78%;padding:11px 15px;
+  font-size:13.5px;line-height:1.68;border-radius:12px;
+}
+.msg-user .bubble{
+  background:rgba(233,196,106,.13);
+  border:1px solid rgba(233,196,106,.24);
+  border-bottom-right-radius:3px;
+}
+.msg-agent .bubble{
+  background:rgba(231,111,81,.08);
+  border:1px solid rgba(231,111,81,.18);
+  border-bottom-left-radius:3px;
+}
+.bubble pre{
+  background:rgba(22,40,51,.8);
+  border:1px solid var(--border);
+  border-radius:7px;padding:12px;margin:8px 0;
+  overflow-x:auto;font-family:var(--mono);font-size:11.5px;
+  line-height:1.6;color:var(--text);
+}
+.bubble code{
+  font-family:var(--mono);font-size:11.5px;
+  background:rgba(22,40,51,.7);
+  padding:2px 5px;border-radius:4px;color:var(--sand);
+}
+.bubble pre code{background:none;padding:0;color:inherit;}
+.bubble p+p{margin-top:.5em;}
+.bubble ul,.bubble ol{margin:.4em 0 .4em 1.2em;}
+.bubble li{margin:.2em 0;}
+
+/* delegation event */
+.deleg{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 13px;
+  background:rgba(38,70,83,.7);
+  border:1px solid var(--border);
+  border-radius:8px;
+  align-self:flex-start;
+  font-family:var(--mono);font-size:11px;
+  animation:fadeUp .18s ease;
+  max-width:90%;
+}
+.deleg-arrow{color:var(--orange);}
+.deleg-name{color:var(--coral);font-weight:500;}
+.deleg-task{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* typing */
+.typing-wrap{display:flex;flex-direction:column;gap:5px;align-items:flex-start;}
+.typing{
+  display:flex;gap:5px;padding:11px 14px;
+  background:rgba(231,111,81,.08);
+  border:1px solid rgba(231,111,81,.18);
+  border-radius:12px;border-bottom-left-radius:3px;
+}
+.td{
+  width:6px;height:6px;border-radius:50%;background:var(--coral);
+  animation:tdBounce 1.2s ease-in-out infinite;
+}
+.td:nth-child(2){animation-delay:.18s;}
+.td:nth-child(3){animation-delay:.36s;}
+@keyframes tdBounce{0%,80%,100%{transform:translateY(0);opacity:.45;}40%{transform:translateY(-6px);opacity:1;}}
+
+/* ── Input ──────────────────────────────────── */
+.input-wrap{padding:14px 22px 20px;border-top:1px solid var(--border);}
+.input-row{display:flex;gap:9px;align-items:flex-end;}
+#user-input{
+  flex:1;min-height:46px;max-height:160px;
+  background:var(--surface);
+  border:1px solid var(--border);border-radius:11px;
+  padding:12px 15px;
+  color:var(--text);font-family:var(--sans);font-size:13.5px;
+  resize:none;outline:none;
+  transition:border-color .15s;
+  line-height:1.5;
+}
+#user-input:focus{border-color:var(--border2);}
+#user-input::placeholder{color:var(--muted);}
+#send-btn{
+  width:46px;height:46px;flex-shrink:0;cursor:pointer;
+  background:var(--orange);border:none;border-radius:11px;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s,transform .1s;
+}
+#send-btn:hover{background:var(--coral);}
+#send-btn:active{transform:scale(.95);}
+#send-btn:disabled{background:rgba(231,111,81,.3);cursor:not-allowed;}
+#send-btn svg{width:17px;height:17px;fill:white;}
+.input-hint{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:7px;}
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">
+    <div class="brand-logo">
+      <div class="brand-icon">◈</div>
+      <h1>DeepSeek Agent</h1>
+    </div>
+    <div class="brand-sub">multi-agent v2 · puter.com</div>
+  </div>
+
+  <div class="agents-label">Agents</div>
+
+  <div class="agent-row" id="ag-orchestrator">
+    <div class="dot" id="dot-orchestrator"></div>
+    <div>
+      <div class="agent-name">Orchestrator</div>
+      <div class="agent-cap">routes · synthesises</div>
+    </div>
+  </div>
+  <div class="agent-row" id="ag-code">
+    <div class="dot" id="dot-code"></div>
+    <div>
+      <div class="agent-name">CodeExpert</div>
+      <div class="agent-cap">write · review · refactor</div>
+    </div>
+  </div>
+  <div class="agent-row" id="ag-file">
+    <div class="dot" id="dot-file"></div>
+    <div>
+      <div class="agent-name">FileExpert</div>
+      <div class="agent-cap">explore · organise</div>
+    </div>
+  </div>
+  <div class="agent-row" id="ag-shell">
+    <div class="dot" id="dot-shell"></div>
+    <div>
+      <div class="agent-name">ShellExpert</div>
+      <div class="agent-cap">git · build · deploy</div>
+    </div>
+  </div>
+  <div class="agent-row" id="ag-debug">
+    <div class="dot" id="dot-debug"></div>
+    <div>
+      <div class="agent-name">DebugExpert</div>
+      <div class="agent-cap">trace · fix · verify</div>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="sidebar-foot">
+    <div class="model-pill">deepseek/deepseek-v4-pro</div>
+    <button id="clear-btn">⌫ Clear conversation</button>
+  </div>
+</aside>
+
+<main>
+  <div class="topbar">
+    <span class="topbar-title">Multi-Agent Coding Assistant</span>
+    <span id="status-label">ready</span>
+  </div>
+
+  <div id="messages">
+    <div class="welcome" id="welcome">
+      <div class="welcome-glyph">◈</div>
+      <h2>How can I help?</h2>
+      <p>Ask me to write code, debug errors, explore your project, run commands, or design new features.</p>
+      <div class="chips">
+        <div class="chip" onclick="fillInput('Write a Python function to parse JSON files')">Write Python code</div>
+        <div class="chip" onclick="fillInput('Debug this error: AttributeError: object has no attribute')">Debug an error</div>
+        <div class="chip" onclick="fillInput('Explain how the orchestrator routes tasks to experts')">Explain the architecture</div>
+        <div class="chip" onclick="fillInput('How do I add a new expert agent to this system?')">Add a new agent</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-wrap">
+    <div class="input-row">
+      <textarea id="user-input" rows="1" placeholder="Ask anything… (⏎ send, Shift+⏎ newline)"></textarea>
+      <button id="send-btn" title="Send">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+    <div class="input-hint">Powered by Claude Sonnet · multi-agent simulation</div>
+  </div>
+</main>
+
+<script>
+const SYSTEM = `You are a multi-agent coding assistant orchestrator. You manage a team of expert agents:
+- CodeExpert: writes, reviews, and refactors code
+- FileExpert: explores project structure and manages files
+- ShellExpert: handles git, builds, test runners, and CLI tasks
+- DebugExpert: diagnoses errors and traces bugs with root-cause rigour
+
+When you route a task to an expert, emit exactly ONE delegation marker on its own line:
+[DELEGATE:ExpertName:Brief task description under 60 chars]
+
+Rules:
+- Always delegate to the most appropriate expert. For complex tasks, chain multiple experts.
+- After delegating, simulate the expert completing the task and show their result.
+- Mark expert output sections with [EXPERT:ExpertName] before the result.
+- Be technical, precise, and detailed in your responses.
+- Use markdown for code blocks, lists, and structure.
+- The user is an experienced systems programmer working with C, C++, Python, and embedded systems.
+- The project is a DeepSeek-powered multi-agent system running via Puter.com's API.`;
+
+const msgs = [];
+let busy = false;
+
+const messagesEl = document.getElementById('messages');
+const inputEl    = document.getElementById('user-input');
+const sendBtn    = document.getElementById('send-btn');
+const statusEl   = document.getElementById('status-label');
+const welcomeEl  = document.getElementById('welcome');
+
+const AGENTS = {
+  orchestrator: {dot:'dot-orchestrator', row:'ag-orchestrator'},
+  code:         {dot:'dot-code',         row:'ag-code'},
+  file:         {dot:'dot-file',         row:'ag-file'},
+  shell:        {dot:'dot-shell',        row:'ag-shell'},
+  debug:        {dot:'dot-debug',        row:'ag-debug'},
+};
+
+function setAgentState(key, state) {
+  const a = AGENTS[key]; if (!a) return;
+  const dot = document.getElementById(a.dot);
+  const row = document.getElementById(a.row);
+  dot.className = 'dot' + (state === 'active' ? ' active' : state === 'busy' ? ' busy' : '');
+  row.className = 'agent-row' + (state !== 'idle' ? ' lit' : '');
+}
+
+function resetAgents() {
+  Object.keys(AGENTS).forEach(k => setAgentState(k, 'idle'));
+}
+
+function setStatus(text, working=false) {
+  statusEl.textContent = text;
+  statusEl.className   = working ? 'working' : '';
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderMarkdown(text) {
+  let html = escapeHtml(text);
+  // code blocks
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_,lang,code) =>
+    `<pre><code>${code.trimEnd()}</code></pre>`);
+  // inline code
+  html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  // bold
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // italics
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // headers
+  html = html.replace(/^### (.+)$/gm, '<strong>$1</strong>');
+  html = html.replace(/^## (.+)$/gm, '<strong style="font-size:15px">$1</strong>');
+  html = html.replace(/^# (.+)$/gm, '<strong style="font-size:16px">$1</strong>');
+  // unordered lists
+  html = html.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>\n?)+/gs, m => `<ul>${m}</ul>`);
+  // numbered lists
+  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  // line breaks
+  html = html.replace(/\n\n/g, '</p><p>');
+  html = html.replace(/\n/g, '<br>');
+  return `<p>${html}</p>`;
+}
+
+function appendUserMsg(text) {
+  if (welcomeEl) welcomeEl.remove();
+  const d = document.createElement('div');
+  d.className = 'msg msg-user';
+  d.innerHTML = `<div class="msg-meta">You</div><div class="bubble">${renderMarkdown(text)}</div>`;
+  messagesEl.appendChild(d);
+  scrollBottom();
+}
+
+function appendDelegation(expert, task) {
+  const d = document.createElement('div');
+  d.className = 'deleg';
+  d.innerHTML = `<span class="deleg-arrow">→</span><span class="deleg-name">${escapeHtml(expert)}</span><span class="deleg-task">${escapeHtml(task)}</span>`;
+  messagesEl.appendChild(d);
+  scrollBottom();
+  // light up the matching agent dot
+  const key = expert.toLowerCase().replace('expert','');
+  setAgentState(key, 'busy');
+  return d;
+}
+
+function createAgentBubble() {
+  const wrap = document.createElement('div');
+  wrap.className = 'typing-wrap';
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'typing';
+  typingDiv.innerHTML = '<div class="td"></div><div class="td"></div><div class="td"></div>';
+  wrap.appendChild(typingDiv);
+  messagesEl.appendChild(wrap);
+  scrollBottom();
+  return {wrap, typingDiv};
+}
+
+function finaliseAgentBubble(wrap, typingDiv, expert, fullText) {
+  const contentHtml = renderMarkdown(fullText);
+  const metaLabel   = expert ? `🤖 ${expert}` : '🤖 Orchestrator';
+  typingDiv.replaceWith(
+    Object.assign(document.createElement('div'), {
+      className:'bubble',
+      innerHTML: contentHtml
+    })
+  );
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  meta.textContent = metaLabel;
+  wrap.insertBefore(meta, wrap.firstChild);
+  wrap.className = 'msg msg-agent';
+  scrollBottom();
+}
+
+function scrollBottom() {
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function fillInput(text) {
+  inputEl.value = text;
+  inputEl.focus();
+  autoResize();
+}
+
+function autoResize() {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + 'px';
+}
+
+async function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text || busy) return;
+  busy = true;
+  sendBtn.disabled = true;
+  inputEl.value = '';
+  autoResize();
+
+  appendUserMsg(text);
+  msgs.push({role:'user', content:text});
+
+  setStatus('thinking…', true);
+  setAgentState('orchestrator', 'active');
+
+  const {wrap, typingDiv} = createAgentBubble();
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: SYSTEM,
+        messages: msgs,
+        stream: true
+      })
+    });
+
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let fullText = '';
+    let currentExpert = null;
+    let buffer = '';
+    let delegElems = {};
+
+    setStatus('streaming…', true);
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += dec.decode(value, {stream:true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') break;
+        try {
+          const ev = JSON.parse(data);
+          if (ev.type === 'content_block_delta' && ev.delta?.text) {
+            fullText += ev.delta.text;
+          }
+        } catch {}
+      }
+
+      // parse delegation markers out of accumulated text
+      const delegRe = /\[DELEGATE:(\w+):([^\]]+)\]/g;
+      let m;
+      while ((m = delegRe.exec(fullText)) !== null) {
+        const key = m[1] + m[2];
+        if (!delegElems[key]) {
+          delegElems[key] = appendDelegation(m[1], m[2]);
+          const agentKey = m[1].toLowerCase().replace('expert','');
+          setAgentState(agentKey, 'busy');
+          setTimeout(()=>setAgentState(agentKey,'active'), 800);
+        }
+      }
+
+      // detect current expert from [EXPERT:Name] markers
+      const expRe = /\[EXPERT:(\w+)\]/g;
+      let em;
+      while ((em = expRe.exec(fullText)) !== null) {
+        currentExpert = em[1];
+      }
+
+      scrollBottom();
+    }
+
+    // clean up internal markers before display
+    const cleanText = fullText
+      .replace(/\[DELEGATE:[^\]]+\]/g, '')
+      .replace(/\[EXPERT:[^\]]+\]/g, '')
+      .trim();
+
+    finaliseAgentBubble(wrap, typingDiv, currentExpert || 'Orchestrator', cleanText);
+    msgs.push({role:'assistant', content:fullText});
+
+  } catch (err) {
+    finaliseAgentBubble(wrap, typingDiv, 'Error', `Request failed: ${err.message}`);
+  }
+
+  resetAgents();
+  setStatus('ready');
+  busy = false;
+  sendBtn.disabled = false;
+  inputEl.focus();
+}
+
+// Events
+sendBtn.addEventListener('click', sendMessage);
+inputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+inputEl.addEventListener('input', autoResize);
+document.getElementById('clear-btn').addEventListener('click', () => {
+  msgs.length = 0;
+  messagesEl.innerHTML = '';
+  const w = document.createElement('div');
+  w.className = 'welcome'; w.id = 'welcome';
+  w.innerHTML = `
+    <div class="welcome-glyph">◈</div>
+    <h2>How can I help?</h2>
+    <p>Ask me to write code, debug errors, explore your project, run commands, or design new features.</p>
+    <div class="chips">
+      <div class="chip" onclick="fillInput('Write a Python function to parse JSON files')">Write Python code</div>
+      <div class="chip" onclick="fillInput('Debug this error: AttributeError: object has no attribute')">Debug an error</div>
+      <div class="chip" onclick="fillInput('Explain how the orchestrator routes tasks to experts')">Explain the architecture</div>
+      <div class="chip" onclick="fillInput('How do I add a new expert agent to this system?')">Add a new agent</div>
+    </div>`;
+  messagesEl.appendChild(w);
+  resetAgents();
+  setStatus('ready');
+});
+</script>
+</body>
+</html>
