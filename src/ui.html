@@ -365,8 +365,7 @@ function escapeHtml(value) {
 
 function renderMessage(text) {
   const escaped = escapeHtml(text);
-  return escaped.replace(/
-/g, '<br>');
+  return escaped.replace(/\n/g, '<br>');
 }
 
 function appendMessage(role, text) {
