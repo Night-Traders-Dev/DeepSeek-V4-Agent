@@ -1,12 +1,13 @@
 # PuterAgent
 
-PuterAgent is a local multi-agent coding assistant built around a Puter-compatible orchestrator and expert agents. It supports both a terminal CLI mode and a browser-based web UI.
+PuterAgent is a local multi-agent coding assistant with a local model runner (Ollama) and expert agents. It supports both a terminal CLI mode and a browser-based web UI.
 
 ## Features
 
 - Terminal CLI interaction via `--cli`
 - Browser UI via `--web`
-- Model selection support for multiple vendors
+- Local model execution via Ollama
+- Model selection support for multiple Ollama models
 - Expert routing across Code, File, Shell, and Debug agents
 - Web chat history and clear session support
 - Text file uploads in the browser UI
@@ -20,6 +21,7 @@ PuterAgent is a local multi-agent coding assistant built around a Puter-compatib
 
 - Python 3.11+ recommended
 - `requests` library
+- **Ollama** running locally (https://ollama.ai)
 
 Install dependencies:
 
@@ -29,13 +31,33 @@ pip install requests
 
 ## Setup
 
-1. Place your API token in the `secret` file at the repository root.
-2. Optionally add a custom orchestrator prompt in `SysPrompt`.
+### 1. Install Ollama
 
-The project expects:
+Download and install Ollama from https://ollama.ai
 
-- `secret` — Puter auth token
-- `SysPrompt` — optional custom orchestrator prompt
+### 2. Pull the default model
+
+```bash
+ollama pull qwen2.5-coder:14b
+```
+
+You can also pull other supported models:
+
+```bash
+ollama pull qwen2.5-coder:7b
+ollama pull deepseek-coder:6.7b
+ollama pull neural-chat:7b
+ollama pull mistral:7b
+ollama pull llama2:13b
+```
+
+### 3. Start Ollama
+
+```bash
+ollama serve
+```
+
+This will start the Ollama API server on `http://localhost:11434`.
 
 ## Running
 
@@ -60,7 +82,7 @@ The web UI will launch locally and serve `src/ui.html`, including profile settin
 Choose a model with `--model`:
 
 ```bash
-python src/main.py --cli --model anthropic/claude-opus-4-7
+python src/main.py --cli --model mistral:7b
 ```
 
 ### Web mode
@@ -69,18 +91,14 @@ Use the model dropdown in the sidebar.
 
 ### Supported models
 
-- `deepseek/deepseek-v4-pro`
-- `deepseek/deepseek-chat-v3.1`
-- `deepseek/deepseek-chat`
-- `deepseek/deepseek-r1-0528`
-- `anthropic/claude-opus-4-7`
-- `anthropic/claude-opus-4-6`
-- `openai/gpt-5.5-pro`
-- `moonshotai/kimi-k2.6`
-- `x-ai/grok-4.20-multi-agent`
-- `minimax/minimax-m2.7`
-- `nvidia/nemotron-3-super-120b-a12b`
-- `google/gemini-3.1-pro-preview`
+All Ollama-compatible models are supported. Some popular options:
+
+- `qwen2.5-coder:14b` (default)
+- `qwen2.5-coder:7b`
+- `deepseek-coder:6.7b`
+- `neural-chat:7b`
+- `mistral:7b`
+- `llama2:13b`
 
 ## Commands
 
@@ -101,5 +119,6 @@ In web mode, use the `Clear conversation` button. Uploaded files are attached as
 
 ## Notes
 
-- Keep the `secret` file private.
-- Make sure the chosen model is supported by your configured backend.
+- Make sure Ollama is running before starting PuterAgent
+- Models are pulled once and cached locally by Ollama
+- First run may be slow as the model is loaded into memory
